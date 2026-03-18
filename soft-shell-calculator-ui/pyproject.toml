@@ -1,0 +1,12 @@
+[project]
+name = "soft-shell-calculator-ui"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "soft-shell-calculator-lib",
+]
+
+[tool.uv.sources]
+soft-shell-calculator-lib = { path = "../soft-shell-calculator-lib" }

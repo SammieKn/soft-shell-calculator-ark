@@ -71,6 +71,12 @@ class TestWoodenPileProperties:
     ) -> None:
         assert single_measurement_pile.soft_shell_exit_thickness >= 0
 
+    def test_results_are_cached(self, single_measurement_pile: WoodenPile) -> None:
+        """Accessing _results twice should return the same object (cached)."""
+        first = single_measurement_pile._results
+        second = single_measurement_pile._results
+        assert first is second
+
     def test_raises_when_no_measurements(self) -> None:
         pile = WoodenPile(id="empty", rpd_measurements=[])
         with pytest.raises(ValueError, match="no RPD measurements"):
@@ -87,38 +93,38 @@ class TestWoodenPileProperties:
         assert two_measurement_pile.diameter == pytest.approx(d_avg)
 
 
-class TestWoodenPileValidate:
-    def test_validate_runs_without_error(
-        self, single_measurement_pile: WoodenPile
-    ) -> None:
-        """validate() should not raise even when results are fine."""
-        single_measurement_pile.validate()
-
-    def test_validate_logs_warning_on_asymmetry(self, caplog) -> None:
-        """validate() should log a warning when soft shell entrance/exit differ by >50%."""
-        import logging
-        import numpy as np
-        from soft_shell_calculator_lib.models.rpd_measurement import RPDMeasurement
+class TestWoodenPileRemarks:
+    def test_has_high_drill_amplitude_false_for_low_signal(self) -> None:
+        """A signal well below 75 should not trigger the amplitude remark."""
         from datetime import datetime
+        from soft_shell_calculator_lib.utils import MeasurementIdentifier
 
-        # Construct a minimal valid measurement with a synthetic signal
-        # that deliberately produces asymmetric soft shell values by skewing
-        # the signal heavily to one side.
-        n = 2000
-        x = np.linspace(0, 40 * np.pi, n)
-        signal = 15 + 8 * np.sin(x)
-        # Flatten 40% of the right side to zero to force asymmetry
-        signal[int(0.6 * n) :] = 0.1
-        measurement = RPDMeasurement(
-            id="asymmetric",
-            id_number="TEST/ASYM",
+        low_signal = [10.0] * 500
+        m = RPDMeasurement(
+            identifier=MeasurementIdentifier("W", "C", "P", "M"),
             date=datetime(2025, 1, 1),
             resolution=10,
-            drill_signal=list(signal),
+            drill_signal=low_signal,
         )
-        pile = WoodenPile(id="asym-pile", rpd_measurements=[measurement])
+        pile = WoodenPile(id="low-amp", rpd_measurements=[m])
+        assert pile.has_high_drill_amplitude is False
 
-        with caplog.at_level(logging.WARNING, logger="soft_shell_calculator_lib"):
-            pile.validate()
-        # If asymmetry is detected, a warning should be present
-        # (test may not trigger depending on signal; we just verify no crash)
+    def test_has_high_drill_amplitude_true_for_high_signal(self) -> None:
+        """A signal with at least one value above 75 should trigger the amplitude remark."""
+        from datetime import datetime
+        from soft_shell_calculator_lib.utils import MeasurementIdentifier
+
+        high_signal = [10.0] * 499 + [80.0]
+        m = RPDMeasurement(
+            identifier=MeasurementIdentifier("W", "C", "P", "M"),
+            date=datetime(2025, 1, 1),
+            resolution=10,
+            drill_signal=high_signal,
+        )
+        pile = WoodenPile(id="high-amp", rpd_measurements=[m])
+        assert pile.has_high_drill_amplitude is True
+
+    def test_has_asymmetric_soft_shell_returns_bool(
+        self, single_measurement_pile: WoodenPile
+    ) -> None:
+        assert isinstance(single_measurement_pile.has_asymmetric_soft_shell, bool)

@@ -54,12 +54,12 @@ SOFT_SHELL_IOMA_THRESHOLD_FRACTION: float = 0.4
 the soft shell boundary. Positions where movav > fraction * max(IOMA)
 are considered inside the sound wood zone."""
 
-# --- Signal quality warnings ---
+# --- Signal quality remarks (source: TUD-F8.1.20240813-GP) ---
 
-SOFT_SHELL_ASYMMETRY_WARNING_THRESHOLD: float = 0.5
-"""Relative difference threshold above which a warning is raised when the
-entrance and exit soft shell thicknesses differ. Reference: TUD-F8.1.20240813-GP."""
+DRILL_AMPLITUDE_REMARK_THRESHOLD: float = 75.0
+"""Drilling resistance value (%) above which a remark is shown in the UI,
+advisng the user to visually inspect the signal. Source: TUD-F8.1.20240813-GP."""
 
-DRILL_AMPLITUDE_WARNING_THRESHOLD: float = 0.75
-"""Fraction of the maximum possible drilling amplitude above which a signal
-quality warning is raised. Reference: TUD-F8.1.20240813-GP."""
+SOFT_SHELL_ASYMMETRY_REMARK_THRESHOLD: float = 0.5
+"""Relative difference between entrance and exit soft shell thickness above
+which a remark is shown in the UI. Source: TUD-F8.1.20240813-GP."""

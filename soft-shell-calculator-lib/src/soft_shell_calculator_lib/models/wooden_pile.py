@@ -1,9 +1,11 @@
 from dataclasses import dataclass
+from soft_shell_calculator_lib.models.rpd_measurement import RPDMeasurement
 
 
 @dataclass
 class WoodenPile:
     id: str
+    rpd_measurements: list[RPDMeasurement]
 
     @property
     def diameter(self) -> float:

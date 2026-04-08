@@ -1,14 +1,25 @@
 [project]
 name = "soft-shell-calculator-lib"
 version = "0.1.0"
-description = "Add your description here"
+description = "Backend library for the soft shell calculator"
 readme = "README.md"
 authors = [
     { name = "Sammie", email = "114987952+SammieKn@users.noreply.github.com" }
 ]
 requires-python = ">=3.12"
-dependencies = []
+dependencies = [
+    "numpy>=1.26.0",
+    "scipy>=1.11.0",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0.0",
+]
 
 [build-system]
 requires = ["uv_build>=0.8.4,<0.9.0"]
 build-backend = "uv_build"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

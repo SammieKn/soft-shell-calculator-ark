@@ -1,0 +1,30 @@
+{
+  "skill_name": "viktor-sdk",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "Add a MultiFileField to the parametrization so users can upload multiple .rgp files, then in the DataView read those files and show the number of uploaded files as a DataItem.",
+      "expected_output": "Parametrization with a MultiFileField restricted to .rgp extension, Controller DataView method that guards against None, iterates over file resources, and returns a DataResult with a DataGroup containing a DataItem for the count.",
+      "files": [
+        "soft-shell-calculator-ui/app.py"
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "Organise the parametrization into two tabs: 'Invoer' and 'Opties'. Under 'Invoer' add a Section 'Geometrie' with a NumberField for diameter (mm) and a NumberField for length (mm). Under 'Opties' add a BooleanField to enable filtering.",
+      "expected_output": "Parametrization class with two Tab instances, the first containing a Section with two NumberFields with Dutch labels and mm suffix, the second containing a BooleanField. All labels in Dutch, code identifiers in English.",
+      "files": [
+        "soft-shell-calculator-ui/app.py"
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "Add a PlotlyView to the controller that plots the drill signal from a single uploaded .rgp file. The file is already parsed into an RPDMeasurement object that has a drill_amp attribute (list of floats). Show depth on the x-axis and amplitude on the y-axis.",
+      "expected_output": "Controller view method decorated with @vkt.PlotlyView, creates a plotly go.Figure with a go.Scatter trace using an index-based x-axis and drill_amp on y, returns PlotlyResult(fig). Imports plotly.graph_objects as go.",
+      "files": [
+        "soft-shell-calculator-ui/app.py",
+        "soft-shell-calculator-ui/soft_shell_calculator_lib/__init__.py"
+      ]
+    }
+  ]
+}

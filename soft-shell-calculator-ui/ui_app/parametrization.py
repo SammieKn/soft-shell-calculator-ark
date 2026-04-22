@@ -22,11 +22,6 @@ class Parametrization(vkt.Parametrization):
         description="Ondersteunt een zip met .rgp-metingen of een enkel .rgp-bestand.",
     )
 
-    tab_analyse = vkt.Tab("Analyse")
-    tab_analyse.status = vkt.Text(
-        "De analyse draait automatisch zodra een geldig meetbestand is geupload."
-    )
-
     tab_resultaten = vkt.Tab("Resultaten")
     tab_resultaten.download_csv = vkt.DownloadButton(
         "Download csv",

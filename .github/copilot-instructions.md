@@ -7,3 +7,8 @@
 
 information about the repository:
 - The repository is named "soft-shell-calculator-ark".
+
+structure of the repository:
+- `soft-shell-calculator-lib`: Contains the core logic of the calculator
+- `soft-shell-calculator-tudelft`: Contains old application that is refactored, mainly for validation
+- `soft-shell-calculator-ui`: Contains a VIKTOR application that serves as the user interface for the calculator

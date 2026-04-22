@@ -253,3 +253,101 @@ Example:
 def run_analysis(self, params, **kwargs):
     ...
 ```
+
+---
+
+## Memoize — caching expensive function calls
+
+Use `@vkt.memoize` to cache the result of a slow function. The cached result is
+reused for up to **24 hours** as long as the arguments do not change. This avoids
+re-running the same calculation when the user switches between views or triggers
+a download without changing the input.
+
+**Rules:**
+- Must be a **module-level** function, not a method on `Controller`.
+- All arguments must be **keyword-only** (defined after a bare `*`).
+- Call sites must pass arguments by keyword.
+- In development the local cache is limited to 50 entries (FIFO eviction).
+  In production the storage is unlimited.
+
+**IMPORTANT limitation:** `@vkt.memoize` hashes the arguments to detect changes.
+VIKTOR `FileResource` objects from `params` are **new instances on every render**
+even when the user hasn't changed any files. This means `@vkt.memoize` will
+**always** be a cache miss when the arguments include `FileResource` objects.
+Use `vkt.Storage(scope='session')` instead for file-based inputs (see below).
+
+```python
+import viktor as vkt
+
+
+@vkt.memoize
+def run_heavy_analysis(*, param_a, param_b):
+    # only re-runs when param_a or param_b changes
+    return _do_work(param_a, param_b)
+
+
+class Controller(vkt.Controller):
+
+    @vkt.DataView("Results")
+    def show_results(self, params, **kwargs):
+        result = run_heavy_analysis(param_a=params.a, param_b=params.b)
+        data = vkt.DataGroup(vkt.DataItem("Count", len(result)))
+        return vkt.DataResult(data)
+```
+
+---
+
+## Session Storage — caching file-based results
+
+When uploads (`FileResource` objects) are the input to a long-running analysis,
+use `vkt.Storage(scope='session')` to cache the serialized result. The session
+scope persists for the lifetime of the user's browser tab and is unique per user.
+
+**Pattern — fingerprint → check storage → compute if miss → store → return:**
+
+```python
+import hashlib
+import json
+import viktor as vkt
+
+_FP_KEY   = "analysis_fingerprint"
+_DATA_KEY = "analysis_result"
+
+
+def _fingerprint(files: list) -> str:
+    names = sorted(getattr(f, "filename", "") for f in files)
+    return hashlib.sha256(":".join(names).encode()).hexdigest()
+
+
+def get_or_compute(files: list) -> dict:
+    fp = _fingerprint(files)
+    try:
+        stored_fp = vkt.Storage().get(_FP_KEY, scope="session")
+        if stored_fp.getvalue().decode() == fp:
+            stored = vkt.Storage().get(_DATA_KEY, scope="session")
+            return json.loads(stored.getvalue().decode())
+    except Exception:
+        pass  # cache miss
+
+    result = _run_analysis(files)   # the expensive call
+
+    try:
+        vkt.Storage().set(_FP_KEY,   data=vkt.File.from_data(fp),                  scope="session")
+        vkt.Storage().set(_DATA_KEY, data=vkt.File.from_data(json.dumps(result)),   scope="session")
+    except Exception:
+        pass
+
+    return result
+```
+
+**Key notes:**
+- `vkt.Storage().get(key, scope="session")` raises an exception when the key
+  does not exist — always wrap in `try/except`.
+- `vkt.Storage().set(key, data=vkt.File.from_data(str_or_bytes), scope="session")`
+- Session data is deleted automatically when the browser tab is closed.
+- Requires SDK >= 14.28.0. The `scope='session'` option is only available for
+  `editor` app type and higher.
+- The fingerprint should be based on something stable (filenames, not object
+  identity). Including file sizes adds robustness but requires reading bytes.
+
+

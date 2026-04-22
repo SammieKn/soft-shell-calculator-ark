@@ -13,6 +13,7 @@ from zipfile import BadZipFile, ZipFile
 
 from soft_shell_calculator_lib.models.retaining_wall import RetainingWall
 from soft_shell_calculator_lib.models.rpd_measurement import RPDMeasurement
+from soft_shell_calculator_lib.utils import MeasurementIdentifier
 
 
 @dataclass(frozen=True)
@@ -224,3 +225,28 @@ def _collect_skipped_files(target_dir: Path) -> tuple[str, ...]:
             skipped_files.append(rgp_file.name)
 
     return tuple(skipped_files)
+
+
+def peek_wall_id_from_file_resource(uploaded_file: Any) -> str | None:
+    """Extract the retaining-wall ID from a zip file resource without full analysis.
+
+    Reads the first `.rgp` filename from the zip and parses the wall ID from its
+    stem. Avoids loading any measurement data or constructing domain objects.
+
+    Args:
+        uploaded_file: VIKTOR FileResource-like object.
+
+    Returns:
+        Retaining wall ID or ``None`` if it cannot be determined.
+    """
+    try:
+        file_bytes = _read_uploaded_bytes(uploaded_file)
+        with ZipFile(BytesIO(file_bytes)) as archive:
+            for name in archive.namelist():
+                if name.lower().endswith(".rgp"):
+                    stem = Path(name).stem
+                    identifier = MeasurementIdentifier.from_filename_stem(stem)
+                    return identifier.retaining_wall_id
+    except Exception:
+        return None
+    return None

@@ -5,7 +5,13 @@ structures for summary views, tables, and exports.
 """
 
 from ui_app.services.upload_service import load_uploaded_measurements
-from ui_app.view_models import PileRow, WallAnalysisResult, WallSummary
+from ui_app.view_models import (
+    BatchAnalysisResult,
+    BatchAnalysisResult,
+    PileRow,
+    WallAnalysisResult,
+    WallSummary,
+)
 from soft_shell_calculator_lib.models.retaining_wall import RetainingWall
 from soft_shell_calculator_lib.models.wooden_pile import WoodenPile
 
@@ -162,3 +168,62 @@ def _build_warning_messages(
     if asymmetric_soft_shell:
         warnings.append("Asymmetrische zachte schil")
     return tuple(warnings)
+
+
+_batch_cache: dict[str, BatchAnalysisResult] = {}
+
+
+def _fingerprint(uploaded_files: list) -> str:
+    """Stable cache key derived from uploaded filenames.
+
+    Args:
+        uploaded_files: List of VIKTOR FileResource-like objects.
+
+    Returns:
+        Sorted, joined filename string used as a cache key.
+    """
+    names = sorted(getattr(f, "filename", "") for f in uploaded_files)
+    return "|".join(names)
+
+
+def get_batch(uploaded_files: list) -> BatchAnalysisResult:
+    """Return cached batch result, computing it on first call per file set.
+
+    Args:
+        uploaded_files: List of VIKTOR FileResource-like objects.
+
+    Returns:
+        Cached or freshly computed batch result.
+    """
+    key = _fingerprint(uploaded_files)
+    if key not in _batch_cache:
+        _batch_cache[key] = analyze_batch_uploaded_measurements(uploaded_files)
+    return _batch_cache[key]
+
+
+def analyze_batch_uploaded_measurements(uploaded_files: list) -> BatchAnalysisResult:
+    """Analyze multiple uploaded zip files, one per retaining wall.
+
+    Files that fail analysis are skipped and recorded in ``skipped_walls``.
+
+    Args:
+        uploaded_files: List of VIKTOR FileResource-like objects.
+
+    Returns:
+        Batch result with per-wall analyses and skipped wall filenames.
+    """
+    wall_results: list[WallAnalysisResult] = []
+    skipped_walls: list[str] = []
+
+    for uploaded_file in uploaded_files:
+        source_filename = getattr(uploaded_file, "filename", "onbekend bestand")
+        try:
+            result = analyze_uploaded_measurements(uploaded_file)
+            wall_results.append(result)
+        except Exception:
+            skipped_walls.append(source_filename)
+
+    return BatchAnalysisResult(
+        wall_results=tuple(wall_results),
+        skipped_walls=tuple(skipped_walls),
+    )

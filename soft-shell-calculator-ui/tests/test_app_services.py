@@ -13,8 +13,11 @@ from pathlib import Path
 from zipfile import ZipFile
 
 from ui_app.services.analysis_service import analyze_uploaded_measurements
+from ui_app.services.analysis_service import analyze_batch_uploaded_measurements
 from ui_app.services.export_service import build_pile_csv
+from ui_app.services.export_service import build_batch_csv_zip
 from ui_app.services.upload_service import load_uploaded_measurements
+from ui_app.services.upload_service import peek_wall_id_from_file_resource
 
 
 class _InMemoryFileHandle:
@@ -147,3 +150,89 @@ class TestExportService:
 
         assert "Retaining wall id" in csv_content
         assert analysis_result.pile_rows[0].pile_id in csv_content
+
+
+class TestBatchAnalysisService:
+    def test_returns_results_for_multiple_zips(self, all_rgp_paths: list[Path]) -> None:
+        """Batch analysis should produce one result per valid uploaded zip."""
+        zip_a = _build_zip_upload(
+            {path.name: _read_file_bytes(path) for path in all_rgp_paths[:3]}
+        )
+        zip_b = _build_zip_upload(
+            {path.name: _read_file_bytes(path) for path in all_rgp_paths[3:6]}
+        )
+        files = [
+            FakeUploadedFile("kade_a.zip", zip_a),
+            FakeUploadedFile("kade_b.zip", zip_b),
+        ]
+
+        batch = analyze_batch_uploaded_measurements(files)
+
+        assert len(batch.wall_results) == 2
+        assert batch.skipped_walls == ()
+
+    def test_skips_invalid_zip_and_continues(self, all_rgp_paths: list[Path]) -> None:
+        """A bad zip in the batch should be skipped; valid ones still analyzed."""
+        valid_zip = _build_zip_upload(
+            {path.name: _read_file_bytes(path) for path in all_rgp_paths[:3]}
+        )
+        invalid_bytes = b"this is not a zip"
+        files = [
+            FakeUploadedFile("geldig.zip", valid_zip),
+            FakeUploadedFile("ongeldig.zip", invalid_bytes),
+        ]
+
+        batch = analyze_batch_uploaded_measurements(files)
+
+        assert len(batch.wall_results) == 1
+        assert "ongeldig.zip" in batch.skipped_walls
+
+
+class TestBatchExportService:
+    def test_build_batch_csv_zip_contains_one_csv_per_wall(
+        self, all_rgp_paths: list[Path]
+    ) -> None:
+        """Batch CSV zip should contain one CSV file per successfully analyzed wall."""
+        zip_a = _build_zip_upload(
+            {path.name: _read_file_bytes(path) for path in all_rgp_paths[:3]}
+        )
+        zip_b = _build_zip_upload(
+            {path.name: _read_file_bytes(path) for path in all_rgp_paths[3:6]}
+        )
+        files = [
+            FakeUploadedFile("kade_a.zip", zip_a),
+            FakeUploadedFile("kade_b.zip", zip_b),
+        ]
+        batch = analyze_batch_uploaded_measurements(files)
+
+        zip_bytes = build_batch_csv_zip(batch)
+
+        with io.BytesIO(zip_bytes) as buf:
+            with ZipFile(buf) as archive:
+                csv_names = archive.namelist()
+
+        assert len(csv_names) == 2
+        assert all(name.endswith(".csv") for name in csv_names)
+
+
+class TestPeekWallId:
+    def test_returns_wall_id_from_valid_zip(self, all_rgp_paths: list[Path]) -> None:
+        """Peek should return the wall ID without running full analysis."""
+        zip_content = _build_zip_upload(
+            {path.name: _read_file_bytes(path) for path in all_rgp_paths[:2]}
+        )
+        uploaded_file = FakeUploadedFile("metingen.zip", zip_content)
+
+        wall_id = peek_wall_id_from_file_resource(uploaded_file)
+
+        assert wall_id is not None
+        assert isinstance(wall_id, str)
+        assert len(wall_id) > 0
+
+    def test_returns_none_for_invalid_zip(self) -> None:
+        """Peek should return None for a file that is not a valid zip."""
+        uploaded_file = FakeUploadedFile("corrupt.zip", b"not a zip")
+
+        wall_id = peek_wall_id_from_file_resource(uploaded_file)
+
+        assert wall_id is None

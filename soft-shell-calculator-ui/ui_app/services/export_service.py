@@ -4,9 +4,10 @@ This module assembles downloadable artifacts from app-facing result models.
 """
 
 import csv
-from io import StringIO
+from io import BytesIO, StringIO
+from zipfile import ZIP_DEFLATED, ZipFile
 
-from ui_app.view_models import WallAnalysisResult
+from ui_app.view_models import BatchAnalysisResult, WallAnalysisResult
 
 
 def build_pile_csv(analysis_result: WallAnalysisResult) -> bytes:
@@ -90,3 +91,21 @@ def _format_bool(value: bool) -> str:
         `Yes` or `No`.
     """
     return "Yes" if value else "No"
+
+
+def build_batch_csv_zip(batch_result: BatchAnalysisResult) -> bytes:
+    """Build a zip archive containing one CSV file per retaining wall.
+
+    Args:
+        batch_result: Batch analysis result with multiple wall results.
+
+    Returns:
+        Zip archive bytes with one ``<wall_id>.csv`` entry per wall.
+    """
+    buffer = BytesIO()
+    with ZipFile(buffer, "w", compression=ZIP_DEFLATED) as archive:
+        for wall_result in batch_result.wall_results:
+            wall_id = wall_result.summary.retaining_wall_id
+            csv_bytes = build_pile_csv(wall_result)
+            archive.writestr(f"{wall_id}.csv", csv_bytes)
+    return buffer.getvalue()

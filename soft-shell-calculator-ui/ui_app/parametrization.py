@@ -7,24 +7,51 @@ User-facing labels and help text should be kept in Dutch.
 
 import viktor as vkt
 
+from ui_app.services.upload_service import peek_wall_id_from_file_resource
+
+
+def _get_wall_options(params, **kwargs) -> list[str]:
+    """Return the list of retaining-wall IDs available for selection.
+
+    Args:
+        params: VIKTOR params object.
+
+    Returns:
+        List of wall IDs derived from the uploaded zip filenames.
+    """
+    files = getattr(getattr(params, "tab_invoer", None), "meetbestanden", None) or []
+    options: list[str] = []
+    for uploaded_file in files:
+        wall_id = peek_wall_id_from_file_resource(uploaded_file)
+        if wall_id and wall_id not in options:
+            options.append(wall_id)
+    return sorted(options)
+
 
 class Parametrization(vkt.Parametrization):
     """Top-level VIKTOR parametrization for the soft shell calculator."""
 
     tab_invoer = vkt.Tab("Invoer")
     tab_invoer.uitleg = vkt.Text(
-        "Upload een zip-bestand met .rgp-metingen of een enkel .rgp-bestand. "
-        "De eerste versie toont een samenvatting, een paaloverzicht en een csv-download."
+        "Upload één of meerdere zip-bestanden met .rgp-metingen. "
+        "Elk zip-bestand vertegenwoordigt één kade. "
+        "Na het uploaden kunt u een kade selecteren om de resultaten te bekijken."
     )
-    tab_invoer.meetbestand = vkt.FileField(
-        "Meetbestand",
-        file_types=[".zip", ".rgp"],
-        description="Ondersteunt een zip met .rgp-metingen of een enkel .rgp-bestand.",
+    tab_invoer.meetbestanden = vkt.MultiFileField(
+        "Meetbestanden",
+        file_types=[".zip"],
+        description="Upload één of meerdere zip-bestanden. Elk zip-bestand vertegenwoordigt één kade.",
+    )
+    tab_invoer.geselecteerde_kade = vkt.OptionField(
+        "Geselecteerde kade",
+        options=_get_wall_options,
+        description="Selecteer een kade om de bijbehorende resultaten te bekijken.",
+        autoselect_single_option=True,
     )
 
     tab_resultaten = vkt.Tab("Resultaten")
     tab_resultaten.download_csv = vkt.DownloadButton(
-        "Download csv",
+        "Download csv (alle kades)",
         method="download_csv",
         longpoll=True,
     )

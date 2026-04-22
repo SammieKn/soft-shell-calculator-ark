@@ -76,6 +76,19 @@ class PileRow:
 
 
 @dataclass(frozen=True)
+class BatchAnalysisResult:
+    """Bundle analysis results for multiple uploaded retaining walls.
+
+    Attributes:
+        wall_results: Per-wall analysis results, in upload order.
+        skipped_walls: Source filenames of uploads that could not be analyzed.
+    """
+
+    wall_results: tuple["WallAnalysisResult", ...]
+    skipped_walls: tuple[str, ...]
+
+
+@dataclass(frozen=True)
 class WallAnalysisResult:
     """Bundle all app-facing analysis results for one upload.
 

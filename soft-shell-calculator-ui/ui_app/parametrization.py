@@ -28,6 +28,42 @@ def _get_wall_options(params, **kwargs) -> list[str]:
     return sorted(options)
 
 
+def _natural_sort_key(pile_id: str) -> tuple:
+    import re
+
+    return tuple(
+        int(part) if part.isdigit() else part.lower()
+        for part in re.split(r"(\d+)", pile_id)
+    )
+
+
+def _get_pile_options(params, **kwargs) -> list[str]:
+    """Return pile IDs for the selected wall.
+
+    Args:
+        params: VIKTOR params object.
+
+    Returns:
+        Naturally sorted list of pile IDs for the currently selected wall.
+    """
+    from ui_app.services.analysis_service import get_batch
+
+    files = getattr(getattr(params, "tab_invoer", None), "meetbestanden", None) or []
+    if not files:
+        return []
+    selected_wall_id = getattr(params.tab_invoer, "geselecteerde_kade", None)
+    batch = get_batch(files)
+    for wall_result in batch.wall_results:
+        if wall_result.summary.retaining_wall_id == selected_wall_id:
+            return sorted(
+                (row.pile_id for row in wall_result.pile_rows), key=_natural_sort_key
+            )
+    if batch.wall_results:
+        first = min(batch.wall_results, key=lambda r: r.summary.retaining_wall_id)
+        return sorted((row.pile_id for row in first.pile_rows), key=_natural_sort_key)
+    return []
+
+
 class Parametrization(vkt.Parametrization):
     """Top-level VIKTOR parametrization for the soft shell calculator."""
 
@@ -48,11 +84,17 @@ class Parametrization(vkt.Parametrization):
         description="Selecteer een kade om de bijbehorende resultaten te bekijken.",
         autoselect_single_option=True,
     )
+    tab_invoer.geselecteerde_paal = vkt.OptionField(
+        "Geselecteerde paal",
+        options=_get_pile_options,
+        description="Selecteer een paal om het signaal en de dwarsdoorsnede te bekijken.",
+        autoselect_single_option=True,
+    )
 
     tab_resultaten = vkt.Tab("Resultaten")
-    tab_resultaten.download_csv = vkt.DownloadButton(
-        "Download csv (alle kades)",
-        method="download_csv",
+    tab_resultaten.download_all = vkt.DownloadButton(
+        "Download alles (csv + json + paalrapport, alle kades)",
+        method="download_all",
         longpoll=True,
     )
     tab_resultaten.status = vkt.Text(

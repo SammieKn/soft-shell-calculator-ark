@@ -209,8 +209,9 @@ class TestBatchExportService:
 
         with io.BytesIO(zip_bytes) as buf:
             with ZipFile(buf) as archive:
-                csv_names = archive.namelist()
+                all_names = archive.namelist()
 
+        csv_names = [n for n in all_names if n.endswith(".csv")]
         assert len(csv_names) == 2
         assert all(name.endswith(".csv") for name in csv_names)
 

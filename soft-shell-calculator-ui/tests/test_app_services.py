@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import io
 import json
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 from zipfile import ZipFile
 
@@ -327,7 +327,11 @@ class TestValidationFilter:
     """Unit tests for Controller._apply_validation_filter."""
 
     def _make_batch(self) -> tuple[BatchAnalysisResult, list[PileRow]]:
-        """Build a two-wall batch with two piles each."""
+        """Build a two-wall batch with two piles each for filter testing.
+
+        Returns:
+            Tuple of (batch, flat list of all pile rows).
+        """
         rows_a = (
             _make_pile_row("KadeA", "P1"),
             _make_pile_row("KadeA", "P2"),

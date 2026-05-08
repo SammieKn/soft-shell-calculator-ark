@@ -15,7 +15,12 @@ from ui_app.services.plot_service import (
     build_diameter_histogram,
     build_pile_figure,
 )
-from ui_app.view_models import BatchAnalysisResult, PileRow, WallAnalysisResult, WallSummary
+from ui_app.view_models import (
+    BatchAnalysisResult,
+    PileRow,
+    WallAnalysisResult,
+    WallSummary,
+)
 
 
 class Controller(vkt.Controller):

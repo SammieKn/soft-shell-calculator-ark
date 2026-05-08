@@ -205,7 +205,18 @@ class Controller(vkt.Controller):
 
     @vkt.DataView("Paal-KPIs")
     def show_pile_kpis(self, params, **kwargs):
-        """Show key performance indicators for the selected pile, including Gezonde doorsnede."""
+        """Show key performance indicators for the selected pile.
+
+        Displays pile dimensions and the computed Gezonde doorsnede as separate
+        labelled DataItems, so they are clearly visible outside the figure legend.
+
+        Args:
+            params: VIKTOR params object containing the selected wall and pile.
+            **kwargs: Additional keyword arguments passed by the VIKTOR platform.
+
+        Returns:
+            DataResult containing a DataGroup with pile KPI items.
+        """
         files = self._get_uploaded_files(params)
         if not files:
             data = vkt.DataGroup(
@@ -226,7 +237,7 @@ class Controller(vkt.Controller):
             data = vkt.DataGroup(vkt.DataItem("Status", "Geen paaldata beschikbaar."))
             return vkt.DataResult(data)
 
-        items: list[vkt.DataItem] = [
+        items = [
             vkt.DataItem("Paal", pile_row.pile_id),
         ]
         if pile_row.diameter_mm is not None:

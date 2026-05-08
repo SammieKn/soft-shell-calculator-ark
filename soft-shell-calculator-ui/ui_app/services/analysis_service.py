@@ -4,16 +4,24 @@ This module converts the retaining-wall domain model into app-facing result
 structures for summary views, tables, and exports.
 """
 
+import re
+
 from ui_app.services.upload_service import load_uploaded_measurements
 from ui_app.view_models import (
-    BatchAnalysisResult,
     BatchAnalysisResult,
     PileRow,
     WallAnalysisResult,
     WallSummary,
 )
+from soft_shell_calculator_lib.calculator import (
+    compute_moving_average,
+    compute_overlap_position,
+    filter_signal,
+    trim_signal,
+)
 from soft_shell_calculator_lib.models.retaining_wall import RetainingWall
 from soft_shell_calculator_lib.models.wooden_pile import WoodenPile
+import numpy as np
 
 
 def analyze_uploaded_measurements(uploaded_file: object) -> WallAnalysisResult:
@@ -68,7 +76,22 @@ def _build_pile_rows(retaining_wall: RetainingWall) -> list[PileRow]:
                 )
             )
 
-    return sorted(pile_rows, key=lambda row: (row.construction_part_id, row.pile_id))
+    return sorted(pile_rows, key=lambda row: _natural_sort_key(row.pile_id))
+
+
+def _natural_sort_key(pile_id: str) -> tuple:
+    """Return a sort key for natural ordering of pile IDs.
+
+    Args:
+        pile_id: Pile identifier string such as 'P1.11'.
+
+    Returns:
+        Tuple of alternating string/int parts for correct numeric ordering.
+    """
+    return tuple(
+        int(part) if part.isdigit() else part.lower()
+        for part in re.split(r"(\d+)", pile_id)
+    )
 
 
 def _build_pile_row(
@@ -89,6 +112,35 @@ def _build_pile_row(
     measurement_ids = tuple(
         measurement.identifier.measurement_id for measurement in pile.rpd_measurements
     )
+    drill_signals = tuple(
+        tuple(measurement.drill_signal) for measurement in pile.rpd_measurements
+    )
+    resolutions = tuple(measurement.resolution for measurement in pile.rpd_measurements)
+
+    # Compute processed (trimmed) signals and moving averages for plotting
+    processed_signals_list: list[tuple[float, ...]] = []
+    moving_averages_list: list[tuple[float, ...]] = []
+    trim_offsets_list: list[float] = []
+    for measurement in pile.rpd_measurements:
+        try:
+            raw = np.array(measurement.drill_signal)
+            res = measurement.resolution
+            filtered, threshold_cut = filter_signal(raw, res)
+            trimmed = trim_signal(filtered)
+            offset = compute_overlap_position(raw, threshold_cut, res)
+            movav = compute_moving_average(trimmed)
+            processed_signals_list.append(tuple(float(v) for v in trimmed))
+            moving_averages_list.append(tuple(float(v) for v in movav))
+            trim_offsets_list.append(float(offset))
+        except Exception:
+            processed_signals_list.append(())
+            moving_averages_list.append(())
+            trim_offsets_list.append(0.0)
+
+    processed_signals = tuple(processed_signals_list)
+    moving_averages = tuple(moving_averages_list)
+    trim_offsets = tuple(trim_offsets_list)
+
     high_drill_amplitude = pile.has_high_drill_amplitude
 
     try:
@@ -121,6 +173,11 @@ def _build_pile_row(
             warnings=warnings,
             status="Fout",
             error_message=str(exc),
+            drill_signals=drill_signals,
+            resolutions=resolutions,
+            processed_signals=processed_signals,
+            moving_averages=moving_averages,
+            trim_offsets=trim_offsets,
         )
 
     warnings = _build_warning_messages(
@@ -146,6 +203,11 @@ def _build_pile_row(
         warnings=warnings,
         status=status,
         error_message=None,
+        drill_signals=drill_signals,
+        resolutions=resolutions,
+        processed_signals=processed_signals,
+        moving_averages=moving_averages,
+        trim_offsets=trim_offsets,
     )
 
 

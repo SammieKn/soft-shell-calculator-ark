@@ -5,12 +5,17 @@ high-level interaction flow between the parametrization and the services.
 The controller should remain thin and delegate real work to the service layer.
 """
 
+import plotly.graph_objects as go
 import viktor as vkt
 
 from ui_app.parametrization import Parametrization
 from ui_app.services.analysis_service import get_batch
-from ui_app.services.export_service import build_batch_csv_zip
-from ui_app.view_models import BatchAnalysisResult, WallAnalysisResult
+from ui_app.services.export_service import build_batch_zip
+from ui_app.services.plot_service import (
+    build_diameter_histogram,
+    build_pile_figure,
+)
+from ui_app.view_models import BatchAnalysisResult, PileRow, WallAnalysisResult
 
 
 class Controller(vkt.Controller):
@@ -161,11 +166,69 @@ class Controller(vkt.Controller):
         """Return a zip archive containing one CSV per retaining wall."""
         files = self._get_uploaded_files(params)
         batch = get_batch(files)
-        zip_bytes = build_batch_csv_zip(batch)
+        zip_bytes = build_batch_zip(batch)
         return vkt.DownloadResult(
             file_content=zip_bytes,
             file_name="soft_shell_calculator_resultaten.zip",
         )
+
+    def download_all(self, params, **kwargs):
+        """Return a zip archive with CSV, JSON and HTML pile report for every wall."""
+        files = self._get_uploaded_files(params)
+        batch = get_batch(files)
+        zip_bytes = build_batch_zip(batch)
+        return vkt.DownloadResult(
+            file_content=zip_bytes,
+            file_name="soft_shell_calculator_resultaten.zip",
+        )
+
+    @vkt.PlotlyView("Diameterhistogram")
+    def show_diameter_histogram(self, params, **kwargs):
+        """Show a sorted bar chart of pile diameters for the selected wall."""
+        files = self._get_uploaded_files(params)
+        if not files:
+            fig = go.Figure()
+            fig.add_annotation(
+                text="Upload meetbestanden om de grafiek te tonen.", showarrow=False
+            )
+            return vkt.PlotlyResult(fig)
+        batch = get_batch(files)
+        selected_wall_id = getattr(params.tab_invoer, "geselecteerde_kade", None)
+        wall_result = self._find_wall_result(batch, selected_wall_id)
+        if wall_result is None:
+            fig = go.Figure()
+            fig.add_annotation(
+                text="Selecteer een kade om de grafiek te tonen.", showarrow=False
+            )
+            return vkt.PlotlyResult(fig)
+        return vkt.PlotlyResult(build_diameter_histogram(wall_result))
+
+    @vkt.PlotlyView("Signalen & dwarsdoorsnede")
+    def show_pile_overview(self, params, **kwargs):
+        """Show drilling resistance and cross-section for the selected pile."""
+        files = self._get_uploaded_files(params)
+        if not files:
+            fig = go.Figure()
+            fig.add_annotation(
+                text="Upload meetbestanden om de grafiek te tonen.", showarrow=False
+            )
+            return vkt.PlotlyResult(fig)
+        batch = get_batch(files)
+        selected_wall_id = getattr(params.tab_invoer, "geselecteerde_kade", None)
+        wall_result = self._find_wall_result(batch, selected_wall_id)
+        if wall_result is None:
+            fig = go.Figure()
+            fig.add_annotation(
+                text="Selecteer een kade om de grafiek te tonen.", showarrow=False
+            )
+            return vkt.PlotlyResult(fig)
+        selected_pile_id = getattr(params.tab_invoer, "geselecteerde_paal", None)
+        pile_row = self._find_pile_row(wall_result, selected_pile_id)
+        if pile_row is None:
+            fig = go.Figure()
+            fig.add_annotation(text="Geen paaldata beschikbaar.", showarrow=False)
+            return vkt.PlotlyResult(fig)
+        return vkt.PlotlyResult(build_pile_figure(pile_row))
 
     @staticmethod
     def _get_uploaded_files(params) -> list:
@@ -218,3 +281,27 @@ class Controller(vkt.Controller):
         if value is None:
             return ""
         return f"{value:.1f}"
+
+    @staticmethod
+    def _find_pile_row(
+        wall_result: WallAnalysisResult, selected_pile_id: str | None
+    ) -> PileRow | None:
+        """Find the pile row matching the selected pile ID.
+
+        Falls back to the first alphabetical pile when no selection is made.
+
+        Args:
+            wall_result: Wall analysis result containing pile rows.
+            selected_pile_id: The pile ID chosen by the user.
+
+        Returns:
+            Matching pile row, first alphabetical pile as fallback, or
+            ``None`` if the wall has no pile rows.
+        """
+        if not wall_result.pile_rows:
+            return None
+        if selected_pile_id:
+            for row in wall_result.pile_rows:
+                if row.pile_id == selected_pile_id:
+                    return row
+        return min(wall_result.pile_rows, key=lambda r: r.pile_id)

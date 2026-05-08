@@ -73,6 +73,11 @@ class PileRow:
     warnings: tuple[str, ...]
     status: str
     error_message: str | None
+    drill_signals: tuple[tuple[float, ...], ...] = ()
+    resolutions: tuple[int, ...] = ()
+    processed_signals: tuple[tuple[float, ...], ...] = ()
+    moving_averages: tuple[tuple[float, ...], ...] = ()
+    trim_offsets: tuple[float, ...] = ()
 
 
 @dataclass(frozen=True)

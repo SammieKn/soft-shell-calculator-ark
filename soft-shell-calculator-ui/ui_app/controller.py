@@ -15,7 +15,7 @@ from ui_app.services.plot_service import (
     build_diameter_histogram,
     build_pile_figure,
 )
-from ui_app.view_models import BatchAnalysisResult, PileRow, WallAnalysisResult
+from ui_app.view_models import BatchAnalysisResult, PileRow, WallAnalysisResult, WallSummary
 
 
 class Controller(vkt.Controller):
@@ -34,6 +34,7 @@ class Controller(vkt.Controller):
             return vkt.DataResult(data)
 
         batch = get_batch(files)
+        batch = self._apply_validation_filter(batch, params)
         selected_wall_id = getattr(params.tab_invoer, "geselecteerde_kade", None)
         wall_result = self._find_wall_result(batch, selected_wall_id)
 
@@ -119,6 +120,7 @@ class Controller(vkt.Controller):
             )
 
         batch = get_batch(files)
+        batch = self._apply_validation_filter(batch, params)
         selected_wall_id = getattr(params.tab_invoer, "geselecteerde_kade", None)
         wall_result = self._find_wall_result(batch, selected_wall_id)
 
@@ -166,6 +168,7 @@ class Controller(vkt.Controller):
         """Return a zip archive containing one CSV per retaining wall."""
         files = self._get_uploaded_files(params)
         batch = get_batch(files)
+        batch = self._apply_validation_filter(batch, params)
         zip_bytes = build_batch_zip(batch)
         return vkt.DownloadResult(
             file_content=zip_bytes,
@@ -176,6 +179,7 @@ class Controller(vkt.Controller):
         """Return a zip archive with CSV, JSON and HTML pile report for every wall."""
         files = self._get_uploaded_files(params)
         batch = get_batch(files)
+        batch = self._apply_validation_filter(batch, params)
         zip_bytes = build_batch_zip(batch)
         return vkt.DownloadResult(
             file_content=zip_bytes,
@@ -193,6 +197,7 @@ class Controller(vkt.Controller):
             )
             return vkt.PlotlyResult(fig)
         batch = get_batch(files)
+        batch = self._apply_validation_filter(batch, params)
         selected_wall_id = getattr(params.tab_invoer, "geselecteerde_kade", None)
         wall_result = self._find_wall_result(batch, selected_wall_id)
         if wall_result is None:
@@ -214,6 +219,7 @@ class Controller(vkt.Controller):
             )
             return vkt.PlotlyResult(fig)
         batch = get_batch(files)
+        batch = self._apply_validation_filter(batch, params)
         selected_wall_id = getattr(params.tab_invoer, "geselecteerde_kade", None)
         wall_result = self._find_wall_result(batch, selected_wall_id)
         if wall_result is None:
@@ -229,6 +235,96 @@ class Controller(vkt.Controller):
             fig.add_annotation(text="Geen paaldata beschikbaar.", showarrow=False)
             return vkt.PlotlyResult(fig)
         return vkt.PlotlyResult(build_pile_figure(pile_row))
+
+    def load_validation_table(self, params, **kwargs):
+        """Populate the validation table with all piles from the uploaded files.
+
+        All piles are marked as included by default. Existing table content is
+        replaced so the table always reflects the current set of uploaded files.
+
+        Args:
+            params: VIKTOR params object.
+
+        Returns:
+            SetParamsResult that fills ``tab_validatie.palen`` with every pile.
+        """
+        files = self._get_uploaded_files(params)
+        if not files:
+            return vkt.SetParamsResult({})
+        batch = get_batch(files)
+        table_rows = [
+            {
+                "kade": pile_row.retaining_wall_id,
+                "constructiedeel": pile_row.construction_part_id,
+                "paal": pile_row.pile_id,
+                "opnemen": True,
+            }
+            for wall_result in batch.wall_results
+            for pile_row in wall_result.pile_rows
+        ]
+        return vkt.SetParamsResult({"tab_validatie": {"palen": table_rows}})
+
+    @staticmethod
+    def _apply_validation_filter(
+        batch: BatchAnalysisResult, params
+    ) -> BatchAnalysisResult:
+        """Return a filtered batch with unchecked piles removed.
+
+        Reads ``tab_validatie.palen`` from ``params`` and excludes every pile
+        whose *Opnemen* checkbox is unchecked. When the table is empty (e.g.
+        the user has not yet loaded it) the original batch is returned unchanged.
+
+        Args:
+            batch: Full batch analysis result.
+            params: VIKTOR params object that may contain a validation table.
+
+        Returns:
+            Filtered batch, or the original batch if no exclusions were set.
+        """
+        validation_rows = (
+            getattr(getattr(params, "tab_validatie", None), "palen", None) or []
+        )
+        if not validation_rows:
+            return batch
+
+        excluded: set[tuple[str, str]] = set()
+        for row in validation_rows:
+            if not getattr(row, "opnemen", True):
+                excluded.add(
+                    (getattr(row, "kade", ""), getattr(row, "paal", ""))
+                )
+
+        if not excluded:
+            return batch
+
+        new_wall_results: list[WallAnalysisResult] = []
+        for wall_result in batch.wall_results:
+            new_pile_rows = tuple(
+                pile_row
+                for pile_row in wall_result.pile_rows
+                if (pile_row.retaining_wall_id, pile_row.pile_id) not in excluded
+            )
+            new_summary = WallSummary(
+                source_filename=wall_result.summary.source_filename,
+                retaining_wall_id=wall_result.summary.retaining_wall_id,
+                construction_part_count=wall_result.summary.construction_part_count,
+                pile_count=len(new_pile_rows),
+                measurement_count=sum(r.measurement_count for r in new_pile_rows),
+                valid_file_count=wall_result.summary.valid_file_count,
+                skipped_files=wall_result.summary.skipped_files,
+                failed_pile_count=sum(
+                    1 for r in new_pile_rows if r.error_message is not None
+                ),
+                warning_pile_count=sum(1 for r in new_pile_rows if r.warnings),
+            )
+            new_wall_results.append(
+                WallAnalysisResult(summary=new_summary, pile_rows=new_pile_rows)
+            )
+
+        return BatchAnalysisResult(
+            wall_results=tuple(new_wall_results),
+            skipped_walls=batch.skipped_walls,
+        )
 
     @staticmethod
     def _get_uploaded_files(params) -> list:

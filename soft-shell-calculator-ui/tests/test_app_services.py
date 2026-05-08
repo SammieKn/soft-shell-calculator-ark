@@ -18,6 +18,8 @@ from ui_app.services.export_service import build_pile_csv
 from ui_app.services.export_service import build_batch_csv_zip
 from ui_app.services.upload_service import load_uploaded_measurements
 from ui_app.services.upload_service import peek_wall_id_from_file_resource
+from ui_app.controller import Controller
+from ui_app.view_models import BatchAnalysisResult, PileRow, WallAnalysisResult, WallSummary
 
 
 class _InMemoryFileHandle:
@@ -237,3 +239,202 @@ class TestPeekWallId:
         wall_id = peek_wall_id_from_file_resource(uploaded_file)
 
         assert wall_id is None
+
+
+# ---------------------------------------------------------------------------
+# Helpers for TestValidationFilter
+# ---------------------------------------------------------------------------
+
+
+def _make_pile_row(retaining_wall_id: str, pile_id: str, construction_part_id: str = "D1") -> PileRow:
+    """Build a minimal PileRow for testing.
+
+    Args:
+        retaining_wall_id: Wall identifier.
+        pile_id: Pile identifier.
+        construction_part_id: Construction part identifier.
+
+    Returns:
+        Minimal PileRow instance.
+    """
+    return PileRow(
+        retaining_wall_id=retaining_wall_id,
+        construction_part_id=construction_part_id,
+        pile_id=pile_id,
+        measurement_ids=("M1",),
+        measurement_count=1,
+        diameter_mm=220.0,
+        annual_rings=60,
+        sapwood_thickness_mm=50.0,
+        heartwood_thickness_mm=60.0,
+        soft_shell_entrance_mm=0.0,
+        soft_shell_exit_mm=2.0,
+        high_drill_amplitude=False,
+        asymmetric_soft_shell=False,
+        warnings=(),
+        status="OK",
+        error_message=None,
+    )
+
+
+def _make_wall_summary(wall_id: str, pile_rows: tuple[PileRow, ...]) -> WallSummary:
+    """Build a WallSummary consistent with the given pile rows.
+
+    Args:
+        wall_id: Retaining wall identifier.
+        pile_rows: Pile rows that belong to this wall.
+
+    Returns:
+        WallSummary with counts derived from pile_rows.
+    """
+    return WallSummary(
+        source_filename=f"{wall_id}.zip",
+        retaining_wall_id=wall_id,
+        construction_part_count=1,
+        pile_count=len(pile_rows),
+        measurement_count=sum(r.measurement_count for r in pile_rows),
+        valid_file_count=len(pile_rows),
+        skipped_files=(),
+        failed_pile_count=0,
+        warning_pile_count=0,
+    )
+
+
+@dataclass
+class _FakeValidationRow:
+    """Mimics a single row from the VIKTOR validation table."""
+
+    kade: str
+    paal: str
+    opnemen: bool
+
+
+@dataclass
+class _FakeValidatieTab:
+    """Mimics ``params.tab_validatie``."""
+
+    palen: list[_FakeValidationRow]
+
+
+@dataclass
+class _FakeParams:
+    """Mimics the VIKTOR params object for validation filter tests."""
+
+    tab_validatie: _FakeValidatieTab | None = None
+
+
+class TestValidationFilter:
+    """Unit tests for Controller._apply_validation_filter."""
+
+    def _make_batch(self) -> tuple[BatchAnalysisResult, list[PileRow]]:
+        """Build a two-wall batch with two piles each for filter testing.
+
+        Returns:
+            Tuple of (batch, flat list of all pile rows).
+        """
+        rows_a = (
+            _make_pile_row("KadeA", "P1"),
+            _make_pile_row("KadeA", "P2"),
+        )
+        rows_b = (
+            _make_pile_row("KadeB", "P3"),
+            _make_pile_row("KadeB", "P4"),
+        )
+        wall_a = WallAnalysisResult(summary=_make_wall_summary("KadeA", rows_a), pile_rows=rows_a)
+        wall_b = WallAnalysisResult(summary=_make_wall_summary("KadeB", rows_b), pile_rows=rows_b)
+        all_rows = list(rows_a) + list(rows_b)
+        return BatchAnalysisResult(wall_results=(wall_a, wall_b), skipped_walls=()), all_rows
+
+    def test_empty_table_returns_original_batch(self) -> None:
+        """When the validation table is empty, the batch is returned unchanged."""
+        batch, _ = self._make_batch()
+        params = _FakeParams(tab_validatie=_FakeValidatieTab(palen=[]))
+
+        result = Controller._apply_validation_filter(batch, params)
+
+        assert result is batch
+
+    def test_no_validatie_tab_returns_original_batch(self) -> None:
+        """When tab_validatie is absent, the batch is returned unchanged."""
+        batch, _ = self._make_batch()
+        params = _FakeParams(tab_validatie=None)
+
+        result = Controller._apply_validation_filter(batch, params)
+
+        assert result is batch
+
+    def test_all_included_returns_original_batch(self) -> None:
+        """When all piles are checked, the batch is returned unchanged."""
+        batch, all_rows = self._make_batch()
+        validation_rows = [
+            _FakeValidationRow(kade=r.retaining_wall_id, paal=r.pile_id, opnemen=True)
+            for r in all_rows
+        ]
+        params = _FakeParams(tab_validatie=_FakeValidatieTab(palen=validation_rows))
+
+        result = Controller._apply_validation_filter(batch, params)
+
+        assert result is batch
+
+    def test_excluded_pile_is_removed(self) -> None:
+        """An unchecked pile should not appear in the filtered batch."""
+        batch, all_rows = self._make_batch()
+        validation_rows = [
+            _FakeValidationRow(
+                kade=r.retaining_wall_id,
+                paal=r.pile_id,
+                opnemen=(r.pile_id != "P2"),
+            )
+            for r in all_rows
+        ]
+        params = _FakeParams(tab_validatie=_FakeValidatieTab(palen=validation_rows))
+
+        result = Controller._apply_validation_filter(batch, params)
+
+        all_pile_ids = [
+            row.pile_id
+            for wall in result.wall_results
+            for row in wall.pile_rows
+        ]
+        assert "P2" not in all_pile_ids
+        assert "P1" in all_pile_ids
+
+    def test_filtered_summary_counts_are_updated(self) -> None:
+        """After filtering, pile_count and measurement_count reflect the remaining piles."""
+        batch, all_rows = self._make_batch()
+        # Exclude P1 from KadeA (measurement_count = 1)
+        validation_rows = [
+            _FakeValidationRow(
+                kade=r.retaining_wall_id,
+                paal=r.pile_id,
+                opnemen=(r.pile_id != "P1"),
+            )
+            for r in all_rows
+        ]
+        params = _FakeParams(tab_validatie=_FakeValidatieTab(palen=validation_rows))
+
+        result = Controller._apply_validation_filter(batch, params)
+
+        wall_a = next(w for w in result.wall_results if w.summary.retaining_wall_id == "KadeA")
+        assert wall_a.summary.pile_count == 1
+        assert wall_a.summary.measurement_count == 1
+
+    def test_multiple_exclusions_across_walls(self) -> None:
+        """Excluding piles from multiple walls should work independently."""
+        batch, all_rows = self._make_batch()
+        excluded = {"P1", "P3"}
+        validation_rows = [
+            _FakeValidationRow(
+                kade=r.retaining_wall_id,
+                paal=r.pile_id,
+                opnemen=(r.pile_id not in excluded),
+            )
+            for r in all_rows
+        ]
+        params = _FakeParams(tab_validatie=_FakeValidatieTab(palen=validation_rows))
+
+        result = Controller._apply_validation_filter(batch, params)
+
+        remaining = {row.pile_id for wall in result.wall_results for row in wall.pile_rows}
+        assert remaining == {"P2", "P4"}
+

@@ -91,6 +91,22 @@ class Parametrization(vkt.Parametrization):
         autoselect_single_option=True,
     )
 
+    tab_validatie = vkt.Tab("Validatie")
+    tab_validatie.uitleg = vkt.Text(
+        "Gebruik deze tab om palen uit te sluiten van de analyse en export. "
+        "Klik op 'Laad palen' om de tabel te vullen met alle palen uit de geüploade bestanden. "
+        "Verwijder het vinkje bij 'Opnemen' om een paal uit te sluiten."
+    )
+    tab_validatie.laad_palen = vkt.SetParamsButton(
+        "Laad palen",
+        method="load_validation_table",
+    )
+    tab_validatie.palen = vkt.Table("Palen")
+    tab_validatie.palen.kade = vkt.TextField("Kade")
+    tab_validatie.palen.constructiedeel = vkt.TextField("Constructiedeel")
+    tab_validatie.palen.paal = vkt.TextField("Paal")
+    tab_validatie.palen.opnemen = vkt.BooleanField("Opnemen")
+
     tab_resultaten = vkt.Tab("Resultaten")
     tab_resultaten.download_all = vkt.DownloadButton(
         "Download alles (csv + json + paalrapport, alle kades)",

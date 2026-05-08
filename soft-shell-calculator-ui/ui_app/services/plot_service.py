@@ -132,9 +132,17 @@ def build_pile_figure(pile_row: PileRow) -> go.Figure:
     _add_resistance_traces(fig, pile_row, row=1, col=1)
     _add_polar_traces(fig, pile_row, polar_ref="polar", show_legend=True)
 
+    multiple_measurements = len([s for s in pile_row.processed_signals if s]) > 1
+    subtitle = (
+        "<br><sup><i style='color:#888888'>Let op: meerdere boringen uitgevoerd, "
+        "gemiddelde is genomen voor bepalen van de diktes van de lagen.</i></sup>"
+        if multiple_measurements
+        else ""
+    )
+
     fig.update_layout(
         height=500,
-        title_text=f"Paal {pile_row.pile_id}",
+        title_text=f"Paal {pile_row.pile_id}{subtitle}",
         plot_bgcolor="white",
         paper_bgcolor="white",
         showlegend=True,
@@ -163,44 +171,61 @@ def _add_resistance_traces(
         row: Subplot row index (1-based).
         col: Subplot column index (1-based).
     """
-    resolution = pile_row.resolutions[0] if pile_row.resolutions else 1
-
-    # Trimmed/filtered signal (blue) — aligned at trim offset
-    if pile_row.processed_signals and pile_row.processed_signals[0]:
-        offset = pile_row.trim_offsets[0] if pile_row.trim_offsets else 0.0
-        proc = pile_row.processed_signals[0]
-        proc_depth = [offset + i / resolution for i in range(len(proc))]
+    # Plot all available measurements; measurement 0 = primary (blue/red), rest = grey
+    for i, proc in enumerate(pile_row.processed_signals):
+        if not proc:
+            continue
+        resolution = pile_row.resolutions[i] if i < len(pile_row.resolutions) else 1
+        offset_i = pile_row.trim_offsets[i] if i < len(pile_row.trim_offsets) else 0.0
+        proc_depth = [offset_i + j / resolution for j in range(len(proc))]
+        is_primary = i == 0
+        signal_colour = _COLOUR_PROCESSED if is_primary else _COLOUR_GREY
+        movav_colour = _COLOUR_MOVAV if is_primary else _COLOUR_GREY
+        signal_label = (
+            "Gefilterd signaal" if is_primary else f"Gefilterd signaal {i + 1}"
+        )
+        movav_label = (
+            "Voortschrijdend gemiddelde"
+            if is_primary
+            else f"Voortschrijdend gemiddelde {i + 1}"
+        )
         fig.add_trace(
             go.Scatter(
                 x=proc_depth,
                 y=list(proc),
                 mode="lines",
-                name="Gefilterd signaal",
-                line={"color": _COLOUR_PROCESSED, "width": 1},
+                name=signal_label,
+                line={"color": signal_colour, "width": 1},
                 showlegend=True,
                 legendgroup="signals",
-                legendgrouptitle_text="Boorweerstand",
+                legendgrouptitle_text="Boorweerstand" if is_primary else None,
             ),
             row=row,
             col=col,
         )
 
-        # Moving average (red)
-        if pile_row.moving_averages and pile_row.moving_averages[0]:
-            movav = pile_row.moving_averages[0]
+        # Moving average
+        if i < len(pile_row.moving_averages) and pile_row.moving_averages[i]:
+            movav = pile_row.moving_averages[i]
             fig.add_trace(
                 go.Scatter(
                     x=proc_depth[: len(movav)],
                     y=list(movav),
                     mode="lines",
-                    name="Voortschrijdend gemiddelde",
-                    line={"color": _COLOUR_MOVAV, "width": 2},
+                    name=movav_label,
+                    line={
+                        "color": movav_colour,
+                        "width": 2,
+                        "dash": "dot" if not is_primary else "solid",
+                    },
                     showlegend=True,
                     legendgroup="signals",
                 ),
                 row=row,
                 col=col,
             )
+
+    resolution = pile_row.resolutions[0] if pile_row.resolutions else 1
 
     # Zone spans and KPI lines (only if we have geometry)
     diameter = pile_row.diameter_mm

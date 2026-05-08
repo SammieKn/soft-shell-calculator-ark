@@ -105,7 +105,7 @@ class Parametrization(vkt.Parametrization):
     tab_validatie.palen.kade = vkt.TextField("Kade")
     tab_validatie.palen.constructiedeel = vkt.TextField("Constructiedeel")
     tab_validatie.palen.paal = vkt.TextField("Paal")
-    tab_validatie.palen.opnemen = vkt.BooleanField("Opnemen", default=True)
+    tab_validatie.palen.opnemen = vkt.BooleanField("Opnemen")
 
     tab_resultaten = vkt.Tab("Resultaten")
     tab_resultaten.download_all = vkt.DownloadButton(

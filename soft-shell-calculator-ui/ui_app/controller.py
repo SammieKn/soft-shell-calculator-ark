@@ -203,63 +203,6 @@ class Controller(vkt.Controller):
             return vkt.PlotlyResult(fig)
         return vkt.PlotlyResult(build_diameter_histogram(wall_result))
 
-    @vkt.DataView("Paal-KPIs")
-    def show_pile_kpis(self, params, **kwargs):
-        """Show key performance indicators for the selected pile.
-
-        Displays pile dimensions and the computed Gezonde doorsnede as separate
-        labelled DataItems, so they are clearly visible outside the figure legend.
-
-        Args:
-            params: VIKTOR params object containing the selected wall and pile.
-            **kwargs: Additional keyword arguments passed by the VIKTOR platform.
-
-        Returns:
-            DataResult containing a DataGroup with pile KPI items.
-        """
-        files = self._get_uploaded_files(params)
-        if not files:
-            data = vkt.DataGroup(
-                vkt.DataItem("Status", "Upload meetbestanden om de KPIs te tonen.")
-            )
-            return vkt.DataResult(data)
-        batch = get_batch(files)
-        selected_wall_id = getattr(params.tab_invoer, "geselecteerde_kade", None)
-        wall_result = self._find_wall_result(batch, selected_wall_id)
-        if wall_result is None:
-            data = vkt.DataGroup(
-                vkt.DataItem("Status", "Selecteer een kade om de KPIs te tonen.")
-            )
-            return vkt.DataResult(data)
-        selected_pile_id = getattr(params.tab_invoer, "geselecteerde_paal", None)
-        pile_row = self._find_pile_row(wall_result, selected_pile_id)
-        if pile_row is None:
-            data = vkt.DataGroup(vkt.DataItem("Status", "Geen paaldata beschikbaar."))
-            return vkt.DataResult(data)
-
-        items = [
-            vkt.DataItem("Paal", pile_row.pile_id),
-        ]
-        if pile_row.diameter_mm is not None:
-            items.append(vkt.DataItem("Diameter", pile_row.diameter_mm, suffix="mm", number_of_decimals=0))
-        if pile_row.heartwood_thickness_mm is not None:
-            items.append(vkt.DataItem("Kernhout", pile_row.heartwood_thickness_mm, suffix="mm", number_of_decimals=0))
-        if pile_row.sapwood_thickness_mm is not None:
-            items.append(vkt.DataItem("Spinthout", pile_row.sapwood_thickness_mm, suffix="mm", number_of_decimals=0))
-        if pile_row.soft_shell_entrance_mm is not None:
-            items.append(vkt.DataItem("Zachte schil links", pile_row.soft_shell_entrance_mm, suffix="mm", number_of_decimals=0))
-        if pile_row.soft_shell_exit_mm is not None:
-            items.append(vkt.DataItem("Zachte schil rechts", pile_row.soft_shell_exit_mm, suffix="mm", number_of_decimals=0))
-        if (
-            pile_row.diameter_mm is not None
-            and pile_row.soft_shell_entrance_mm is not None
-            and pile_row.soft_shell_exit_mm is not None
-        ):
-            sound_section_mm = pile_row.diameter_mm - pile_row.soft_shell_entrance_mm - pile_row.soft_shell_exit_mm
-            items.append(vkt.DataItem("Gezonde doorsnede", sound_section_mm, suffix="mm", number_of_decimals=0))
-
-        return vkt.DataResult(vkt.DataGroup(*items))
-
     @vkt.PlotlyView("Signalen & dwarsdoorsnede")
     def show_pile_overview(self, params, **kwargs):
         """Show drilling resistance and cross-section for the selected pile."""

@@ -312,8 +312,8 @@ def _add_resistance_traces(
     if soft_exit:
         kpi_shapes.append((offset + diameter - soft_exit, _KPI_SOFT, "dash"))
     if heartwood is not None and sapwood is not None:
-        kpi_shapes.append((centre - heartwood - sapwood, _KPI_SPINT, "dash"))
-        kpi_shapes.append((centre + heartwood + sapwood, _KPI_SPINT, "dash"))
+        kpi_shapes.append((centre - heartwood - sapwood, _KPI_SPINT, "dashdot"))
+        kpi_shapes.append((centre + heartwood + sapwood, _KPI_SPINT, "dashdot"))
 
     for x_val, colour, dash in kpi_shapes:
         fig.add_shape(
@@ -329,12 +329,12 @@ def _add_resistance_traces(
 
     # Invisible dummy traces so KPI lines appear in the legend
     _legend_lines: list[tuple[str, str, str, bool]] = [
-        ("Middelpunt", _KPI_CENTRE, "dot", False),
+        ("Midden", _KPI_CENTRE, "dot", True),
         ("Zachte schil", _KPI_SOFT, "dash", bool(soft_entrance or soft_exit)),
         (
             "Spinthout",
             _KPI_SPINT,
-            "dash",
+            "dashdot",
             heartwood is not None and sapwood is not None,
         ),
     ]

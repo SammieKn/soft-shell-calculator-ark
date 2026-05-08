@@ -426,21 +426,6 @@ def _add_polar_traces(
         )
     )
 
-    # Combined sound cross-section label — kernhout + spinthout = full diameter minus soft shell
-    sound_section_mm = 2 * R - soft_entrance - soft_exit
-    fig.add_trace(
-        go.Barpolar(
-            r=[0],
-            theta=[0],
-            width=[0],
-            marker_color=_COLOUR_SAPWOOD,
-            name=f"Gezonde doorsnede ({sound_section_mm:.0f} mm)",
-            showlegend=show_legend,
-            legendgroup="polar",
-            subplot=polar_ref,
-        )
-    )
-
     # Soft shell — outermost, asymmetric: links=180° (9 o'clock), rechts=0° (3 o'clock)
     fig.add_trace(
         go.Barpolar(

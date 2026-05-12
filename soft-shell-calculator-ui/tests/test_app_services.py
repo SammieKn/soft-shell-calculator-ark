@@ -14,12 +14,19 @@ from zipfile import ZipFile
 
 from ui_app.services.analysis_service import analyze_uploaded_measurements
 from ui_app.services.analysis_service import analyze_batch_uploaded_measurements
+from ui_app.services.analysis_service import get_batch
+from ui_app.services.analysis_service import _fingerprint
 from ui_app.services.export_service import build_pile_csv
 from ui_app.services.export_service import build_batch_csv_zip
 from ui_app.services.upload_service import load_uploaded_measurements
 from ui_app.services.upload_service import peek_wall_id_from_file_resource
 from ui_app.controller import Controller
-from ui_app.view_models import BatchAnalysisResult, PileRow, WallAnalysisResult, WallSummary
+from ui_app.view_models import (
+    BatchAnalysisResult,
+    PileRow,
+    WallAnalysisResult,
+    WallSummary,
+)
 
 
 class _InMemoryFileHandle:
@@ -190,6 +197,34 @@ class TestBatchAnalysisService:
         assert "ongeldig.zip" in batch.skipped_walls
 
 
+class TestGetBatchCaching:
+    """Tests for the in-process batch result cache in get_batch."""
+
+    def test_same_files_return_identical_object(
+        self, all_rgp_paths: list[Path]
+    ) -> None:
+        """Calling get_batch twice with the same files returns the exact same object."""
+        import ui_app.services.analysis_service as svc
+
+        zip_content = _build_zip_upload(
+            {path.name: _read_file_bytes(path) for path in all_rgp_paths[:3]}
+        )
+        files = [FakeUploadedFile("kade_cache.zip", zip_content)]
+        svc._batch_cache.clear()
+
+        first = get_batch(files)
+        second = get_batch(files)
+
+        assert first is second
+
+    def test_fingerprint_is_order_independent(self) -> None:
+        """The fingerprint must be the same regardless of file order."""
+        file_a = FakeUploadedFile("alpha.zip", b"")
+        file_b = FakeUploadedFile("beta.zip", b"")
+
+        assert _fingerprint([file_a, file_b]) == _fingerprint([file_b, file_a])
+
+
 class TestBatchExportService:
     def test_build_batch_csv_zip_contains_one_csv_per_wall(
         self, all_rgp_paths: list[Path]
@@ -246,7 +281,9 @@ class TestPeekWallId:
 # ---------------------------------------------------------------------------
 
 
-def _make_pile_row(retaining_wall_id: str, pile_id: str, construction_part_id: str = "D1") -> PileRow:
+def _make_pile_row(
+    retaining_wall_id: str, pile_id: str, construction_part_id: str = "D1"
+) -> PileRow:
     """Build a minimal PileRow for testing.
 
     Args:
@@ -340,10 +377,17 @@ class TestValidationFilter:
             _make_pile_row("KadeB", "P3"),
             _make_pile_row("KadeB", "P4"),
         )
-        wall_a = WallAnalysisResult(summary=_make_wall_summary("KadeA", rows_a), pile_rows=rows_a)
-        wall_b = WallAnalysisResult(summary=_make_wall_summary("KadeB", rows_b), pile_rows=rows_b)
+        wall_a = WallAnalysisResult(
+            summary=_make_wall_summary("KadeA", rows_a), pile_rows=rows_a
+        )
+        wall_b = WallAnalysisResult(
+            summary=_make_wall_summary("KadeB", rows_b), pile_rows=rows_b
+        )
         all_rows = list(rows_a) + list(rows_b)
-        return BatchAnalysisResult(wall_results=(wall_a, wall_b), skipped_walls=()), all_rows
+        return (
+            BatchAnalysisResult(wall_results=(wall_a, wall_b), skipped_walls=()),
+            all_rows,
+        )
 
     def test_empty_table_returns_original_batch(self) -> None:
         """When the validation table is empty, the batch is returned unchanged."""
@@ -392,9 +436,7 @@ class TestValidationFilter:
         result = Controller._apply_validation_filter(batch, params)
 
         all_pile_ids = [
-            row.pile_id
-            for wall in result.wall_results
-            for row in wall.pile_rows
+            row.pile_id for wall in result.wall_results for row in wall.pile_rows
         ]
         assert "P2" not in all_pile_ids
         assert "P1" in all_pile_ids
@@ -415,7 +457,9 @@ class TestValidationFilter:
 
         result = Controller._apply_validation_filter(batch, params)
 
-        wall_a = next(w for w in result.wall_results if w.summary.retaining_wall_id == "KadeA")
+        wall_a = next(
+            w for w in result.wall_results if w.summary.retaining_wall_id == "KadeA"
+        )
         assert wall_a.summary.pile_count == 1
         assert wall_a.summary.measurement_count == 1
 
@@ -435,6 +479,7 @@ class TestValidationFilter:
 
         result = Controller._apply_validation_filter(batch, params)
 
-        remaining = {row.pile_id for wall in result.wall_results for row in wall.pile_rows}
+        remaining = {
+            row.pile_id for wall in result.wall_results for row in wall.pile_rows
+        }
         assert remaining == {"P2", "P4"}
-

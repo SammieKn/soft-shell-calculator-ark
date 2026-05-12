@@ -8,6 +8,7 @@ User-facing labels and help text should be kept in Dutch.
 import viktor as vkt
 
 from ui_app.services.upload_service import peek_wall_id_from_file_resource
+from ui_app.services.upload_service import peek_pile_ids_from_file_resource
 
 
 def _get_wall_options(params, **kwargs) -> list[str]:
@@ -38,7 +39,10 @@ def _natural_sort_key(pile_id: str) -> tuple:
 
 
 def _get_pile_options(params, **kwargs) -> list[str]:
-    """Return pile IDs for the selected wall.
+    """Return pile IDs for the selected wall by reading zip filenames only.
+
+    Derives pile IDs directly from `.rgp` filename stems in the uploaded zip —
+    no analysis is performed, keeping the parametrization render fast.
 
     Args:
         params: VIKTOR params object.
@@ -46,22 +50,21 @@ def _get_pile_options(params, **kwargs) -> list[str]:
     Returns:
         Naturally sorted list of pile IDs for the currently selected wall.
     """
-    from ui_app.services.analysis_service import get_batch
-
     files = getattr(getattr(params, "tab_invoer", None), "meetbestanden", None) or []
     if not files:
         return []
-    selected_wall_id = getattr(params.tab_invoer, "geselecteerde_kade", None)
-    batch = get_batch(files)
-    for wall_result in batch.wall_results:
-        if wall_result.summary.retaining_wall_id == selected_wall_id:
-            return sorted(
-                (row.pile_id for row in wall_result.pile_rows), key=_natural_sort_key
-            )
-    if batch.wall_results:
-        first = min(batch.wall_results, key=lambda r: r.summary.retaining_wall_id)
-        return sorted((row.pile_id for row in first.pile_rows), key=_natural_sort_key)
-    return []
+    selected_wall_id = getattr(
+        getattr(params, "tab_invoer", None), "geselecteerde_kade", None
+    )
+    pile_ids: list[str] = []
+    for uploaded_file in files:
+        wall_id = peek_wall_id_from_file_resource(uploaded_file)
+        if selected_wall_id and wall_id != selected_wall_id:
+            continue
+        for pid in peek_pile_ids_from_file_resource(uploaded_file, wall_id):
+            if pid not in pile_ids:
+                pile_ids.append(pid)
+    return sorted(pile_ids, key=_natural_sort_key)
 
 
 class Parametrization(vkt.Parametrization):

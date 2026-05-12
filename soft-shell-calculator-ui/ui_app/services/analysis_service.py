@@ -251,6 +251,9 @@ def _fingerprint(uploaded_files: list) -> str:
 def get_batch(uploaded_files: list) -> BatchAnalysisResult:
     """Return cached batch result, computing it on first call per file set.
 
+    Uses an in-process dict so that switching tabs within the same worker
+    never re-runs the calculation.
+
     Args:
         uploaded_files: List of VIKTOR FileResource-like objects.
 

@@ -1,6 +1,5 @@
 """Plot generation service for the VIKTOR app."""
 
-import math
 import statistics
 
 import plotly.graph_objects as go
@@ -100,15 +99,15 @@ def build_polar_cross_section(pile_row: PileRow) -> go.Figure:
 
     _add_polar_traces(fig, pile_row, polar_ref="polar", show_legend=True)
 
-    area_cm2 = _healthy_area_mm2(
-        pile_row.diameter_mm / 2,  # type: ignore[operator]
+    healthy_d = _healthy_diameter_mm(
+        pile_row.diameter_mm,  # type: ignore[arg-type]
         pile_row.soft_shell_entrance_mm,  # type: ignore[arg-type]
         pile_row.soft_shell_exit_mm,  # type: ignore[arg-type]
-    ) / 100.0
-    area_subtitle = f"<br><sup>Gezond oppervlak: {area_cm2:.1f} cm²</sup>"
+    )
+    diameter_subtitle = f"<br><sup>Gezonde diameter: {healthy_d:.0f} mm</sup>"
 
     fig.update_layout(
-        title=f"Dwarsdoorsnede — {pile_row.pile_id}{area_subtitle}",
+        title=f"Dwarsdoorsnede — {pile_row.pile_id}{diameter_subtitle}",
         polar=_polar_axis_layout(),
         showlegend=True,
     )
@@ -124,20 +123,20 @@ def build_pile_figure(pile_row: PileRow) -> go.Figure:
     Returns:
         A Plotly figure with drilling resistance and polar cross-section side by side.
     """
-    required_for_area = (
+    required_for_diameter = (
         pile_row.diameter_mm,
         pile_row.soft_shell_entrance_mm,
         pile_row.soft_shell_exit_mm,
     )
-    if all(v is not None for v in required_for_area):
-        area_cm2 = _healthy_area_mm2(
-            pile_row.diameter_mm / 2,  # type: ignore[operator]
+    if all(v is not None for v in required_for_diameter):
+        healthy_d = _healthy_diameter_mm(
+            pile_row.diameter_mm,  # type: ignore[arg-type]
             pile_row.soft_shell_entrance_mm,  # type: ignore[arg-type]
             pile_row.soft_shell_exit_mm,  # type: ignore[arg-type]
-        ) / 100.0
+        )
         cross_section_title = (
             f"Dwarsdoorsnede — {pile_row.pile_id}"
-            f"<br><sup>Gezond oppervlak: {area_cm2:.1f} cm²</sup>"
+            f"<br><sup>Gezonde diameter: {healthy_d:.0f} mm</sup>"
         )
     else:
         cross_section_title = f"Dwarsdoorsnede — {pile_row.pile_id}"
@@ -181,42 +180,38 @@ def build_pile_figure(pile_row: PileRow) -> go.Figure:
 # ---------------------------------------------------------------------------
 
 
-def _healthy_area_mm2(R: float, soft_entrance: float, soft_exit: float) -> float:
-    """Compute the healthy cross-sectional area excluding the soft shell zones.
-
-    Uses the exact chord-area integral for a circle of radius R with the soft
-    shell stripped from both sides.
+def _healthy_diameter_mm(
+    diameter: float, soft_entrance: float, soft_exit: float
+) -> float:
+    """Compute the healthy (sound-wood) diameter, excluding soft shell on both sides.
 
     Args:
-        R: Pile radius in mm.
-        soft_entrance: Soft shell thickness on the entrance (left) side in mm.
-        soft_exit: Soft shell thickness on the exit (right) side in mm.
+        diameter: Total pile diameter in mm.
+        soft_entrance: Soft shell thickness on the entrance side in mm.
+        soft_exit: Soft shell thickness on the exit side in mm.
 
     Returns:
-        Healthy cross-sectional area in mm².
+        Healthy diameter in mm (minimum 0).
     """
-    a = max(0.0, min(R - soft_entrance, R))
-    b = max(0.0, min(R - soft_exit, R))
-    return (
-        b * math.sqrt(R**2 - b**2) + R**2 * math.asin(b / R)
-        + a * math.sqrt(R**2 - a**2) + R**2 * math.asin(a / R)
-    )
+    return max(0.0, diameter - soft_entrance - soft_exit)
 
 
 def _polar_axis_layout() -> dict:
     """Return the shared polar axis layout dict for Dwarsdoorsnede charts.
 
     Returns:
-        Plotly polar layout dict with radial grid lines every 25 mm and a
-        hidden angular axis.
+        Plotly polar layout dict with radial grid lines every 25 mm (labelled)
+        and a hidden angular axis.
     """
     return {
         "radialaxis": {
             "range": [0, _POLAR_R_LIM],
             "dtick": 25,
-            "showticklabels": False,
+            "showticklabels": True,
+            "ticksuffix": " mm",
+            "tickfont": {"size": 9, "color": "#888888"},
             "gridwidth": 1,
-            "gridcolor": "#D0D0D0",
+            "gridcolor": "#C0C0C0",
             "layer": "below traces",
         },
         "angularaxis": {"visible": False},
@@ -492,10 +487,10 @@ def _add_polar_traces(
             theta=[0],
             width=[360],
             marker_color=_COLOUR_HEARTWOOD,
-            marker_opacity=0.15,
+            marker_opacity=0.8,
             name=hw_name,
             customdata=[hw_name],
-            hovertemplate="%{customdata}<br>Dikte: %{r:.0f} mm<extra></extra>",
+            hovertemplate="%{customdata}<br>%{r:.0f} mm<extra></extra>",
             showlegend=show_legend,
             legendgroup="polar",
             legendgrouptitle_text="Dwarsdoorsnede",
@@ -512,10 +507,10 @@ def _add_polar_traces(
             theta=[0],
             width=[360],
             marker_color=_COLOUR_SAPWOOD,
-            marker_opacity=0.2,
+            marker_opacity=0.8,
             name=sp_name,
             customdata=[sp_name],
-            hovertemplate="%{customdata}<br>Dikte: %{r:.0f} mm<extra></extra>",
+            hovertemplate="%{customdata}<br>%{r:.0f} mm<extra></extra>",
             showlegend=show_legend,
             legendgroup="polar",
             subplot=polar_ref,
@@ -531,10 +526,10 @@ def _add_polar_traces(
             theta=[180],
             width=[180],
             marker_color=_COLOUR_SOFT_SHELL,
-            marker_opacity=0.25,
+            marker_opacity=0.8,
             name=ss_links_name,
             customdata=[ss_links_name],
-            hovertemplate="%{customdata}<br>Dikte: %{r:.0f} mm<extra></extra>",
+            hovertemplate="%{customdata}<br>%{r:.0f} mm<extra></extra>",
             showlegend=show_legend,
             legendgroup="polar",
             subplot=polar_ref,
@@ -548,10 +543,10 @@ def _add_polar_traces(
             theta=[0],
             width=[180],
             marker_color=_COLOUR_SOFT_SHELL,
-            marker_opacity=0.25,
+            marker_opacity=0.8,
             name=ss_rechts_name,
             customdata=[ss_rechts_name],
-            hovertemplate="%{customdata}<br>Dikte: %{r:.0f} mm<extra></extra>",
+            hovertemplate="%{customdata}<br>%{r:.0f} mm<extra></extra>",
             showlegend=show_legend,
             legendgroup="polar",
             subplot=polar_ref,

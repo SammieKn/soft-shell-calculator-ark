@@ -1,5 +1,6 @@
 """Plot generation service for the VIKTOR app."""
 
+import math
 import statistics
 
 import plotly.graph_objects as go
@@ -98,12 +99,17 @@ def build_polar_cross_section(pile_row: PileRow) -> go.Figure:
         return fig
 
     _add_polar_traces(fig, pile_row, polar_ref="polar", show_legend=True)
+
+    area_cm2 = _healthy_area_mm2(
+        pile_row.diameter_mm / 2,  # type: ignore[operator]
+        pile_row.soft_shell_entrance_mm,  # type: ignore[arg-type]
+        pile_row.soft_shell_exit_mm,  # type: ignore[arg-type]
+    ) / 100.0
+    area_subtitle = f"<br><sup>Gezond oppervlak: {area_cm2:.1f} cm²</sup>"
+
     fig.update_layout(
-        title=f"Dwarsdoorsnede — {pile_row.pile_id}",
-        polar={
-            "radialaxis": {"range": [0, _POLAR_R_LIM], "visible": False},
-            "angularaxis": {"visible": False},
-        },
+        title=f"Dwarsdoorsnede — {pile_row.pile_id}{area_subtitle}",
+        polar=_polar_axis_layout(),
         showlegend=True,
     )
     return fig
@@ -118,13 +124,31 @@ def build_pile_figure(pile_row: PileRow) -> go.Figure:
     Returns:
         A Plotly figure with drilling resistance and polar cross-section side by side.
     """
+    required_for_area = (
+        pile_row.diameter_mm,
+        pile_row.soft_shell_entrance_mm,
+        pile_row.soft_shell_exit_mm,
+    )
+    if all(v is not None for v in required_for_area):
+        area_cm2 = _healthy_area_mm2(
+            pile_row.diameter_mm / 2,  # type: ignore[operator]
+            pile_row.soft_shell_entrance_mm,  # type: ignore[arg-type]
+            pile_row.soft_shell_exit_mm,  # type: ignore[arg-type]
+        ) / 100.0
+        cross_section_title = (
+            f"Dwarsdoorsnede — {pile_row.pile_id}"
+            f"<br><sup>Gezond oppervlak: {area_cm2:.1f} cm²</sup>"
+        )
+    else:
+        cross_section_title = f"Dwarsdoorsnede — {pile_row.pile_id}"
+
     fig = make_subplots(
         rows=1,
         cols=2,
         specs=[[{"type": "xy"}, {"type": "polar"}]],
         subplot_titles=[
             f"Boorweerstand — {pile_row.pile_id}",
-            f"Dwarsdoorsnede — {pile_row.pile_id}",
+            cross_section_title,
         ],
         column_widths=[0.6, 0.4],
     )
@@ -147,10 +171,7 @@ def build_pile_figure(pile_row: PileRow) -> go.Figure:
         paper_bgcolor="white",
         showlegend=True,
         legend={"x": 1.12, "y": 0.5, "xanchor": "left", "tracegroupgap": 16},
-        polar={
-            "radialaxis": {"range": [0, _POLAR_R_LIM], "visible": False},
-            "angularaxis": {"visible": False},
-        },
+        polar=_polar_axis_layout(),
     )
     return fig
 
@@ -158,6 +179,48 @@ def build_pile_figure(pile_row: PileRow) -> go.Figure:
 # ---------------------------------------------------------------------------
 # Private helpers
 # ---------------------------------------------------------------------------
+
+
+def _healthy_area_mm2(R: float, soft_entrance: float, soft_exit: float) -> float:
+    """Compute the healthy cross-sectional area excluding the soft shell zones.
+
+    Uses the exact chord-area integral for a circle of radius R with the soft
+    shell stripped from both sides.
+
+    Args:
+        R: Pile radius in mm.
+        soft_entrance: Soft shell thickness on the entrance (left) side in mm.
+        soft_exit: Soft shell thickness on the exit (right) side in mm.
+
+    Returns:
+        Healthy cross-sectional area in mm².
+    """
+    a = max(0.0, min(R - soft_entrance, R))
+    b = max(0.0, min(R - soft_exit, R))
+    return (
+        b * math.sqrt(R**2 - b**2) + R**2 * math.asin(b / R)
+        + a * math.sqrt(R**2 - a**2) + R**2 * math.asin(a / R)
+    )
+
+
+def _polar_axis_layout() -> dict:
+    """Return the shared polar axis layout dict for Dwarsdoorsnede charts.
+
+    Returns:
+        Plotly polar layout dict with radial grid lines every 25 mm and a
+        hidden angular axis.
+    """
+    return {
+        "radialaxis": {
+            "range": [0, _POLAR_R_LIM],
+            "dtick": 25,
+            "showticklabels": False,
+            "gridwidth": 1,
+            "gridcolor": "#D0D0D0",
+            "layer": "below traces",
+        },
+        "angularaxis": {"visible": False},
+    }
 
 
 def _add_resistance_traces(
@@ -421,6 +484,7 @@ def _add_polar_traces(
     soft_exit = pile_row.soft_shell_exit_mm  # type: ignore[arg-type]
 
     # Heartwood — innermost, full circle
+    hw_name = f"Kernhout ({heartwood:.0f} mm)"
     fig.add_trace(
         go.Barpolar(
             r=[heartwood],
@@ -428,7 +492,10 @@ def _add_polar_traces(
             theta=[0],
             width=[360],
             marker_color=_COLOUR_HEARTWOOD,
-            name=f"Kernhout ({heartwood:.0f} mm)",
+            marker_opacity=0.15,
+            name=hw_name,
+            customdata=[hw_name],
+            hovertemplate="%{customdata}<br>Dikte: %{r:.0f} mm<extra></extra>",
             showlegend=show_legend,
             legendgroup="polar",
             legendgrouptitle_text="Dwarsdoorsnede",
@@ -437,6 +504,7 @@ def _add_polar_traces(
     )
 
     # Sapwood (spinthout) — ring between heartwood and soft shell
+    sp_name = f"Spinthout ({sapwood:.0f} mm)"
     fig.add_trace(
         go.Barpolar(
             r=[sapwood],
@@ -444,7 +512,10 @@ def _add_polar_traces(
             theta=[0],
             width=[360],
             marker_color=_COLOUR_SAPWOOD,
-            name=f"Spinthout ({sapwood:.0f} mm)",
+            marker_opacity=0.2,
+            name=sp_name,
+            customdata=[sp_name],
+            hovertemplate="%{customdata}<br>Dikte: %{r:.0f} mm<extra></extra>",
             showlegend=show_legend,
             legendgroup="polar",
             subplot=polar_ref,
@@ -452,6 +523,7 @@ def _add_polar_traces(
     )
 
     # Soft shell — outermost, asymmetric: links=180° (9 o'clock), rechts=0° (3 o'clock)
+    ss_links_name = f"Zachte schil links ({soft_entrance:.0f} mm)"
     fig.add_trace(
         go.Barpolar(
             r=[soft_entrance],
@@ -459,12 +531,16 @@ def _add_polar_traces(
             theta=[180],
             width=[180],
             marker_color=_COLOUR_SOFT_SHELL,
-            name=f"Zachte schil links ({soft_entrance:.0f} mm)",
+            marker_opacity=0.25,
+            name=ss_links_name,
+            customdata=[ss_links_name],
+            hovertemplate="%{customdata}<br>Dikte: %{r:.0f} mm<extra></extra>",
             showlegend=show_legend,
             legendgroup="polar",
             subplot=polar_ref,
         )
     )
+    ss_rechts_name = f"Zachte schil rechts ({soft_exit:.0f} mm)"
     fig.add_trace(
         go.Barpolar(
             r=[soft_exit],
@@ -472,7 +548,10 @@ def _add_polar_traces(
             theta=[0],
             width=[180],
             marker_color=_COLOUR_SOFT_SHELL,
-            name=f"Zachte schil rechts ({soft_exit:.0f} mm)",
+            marker_opacity=0.25,
+            name=ss_rechts_name,
+            customdata=[ss_rechts_name],
+            hovertemplate="%{customdata}<br>Dikte: %{r:.0f} mm<extra></extra>",
             showlegend=show_legend,
             legendgroup="polar",
             subplot=polar_ref,
@@ -481,7 +560,7 @@ def _add_polar_traces(
 
     # Zone thickness labels inside each zone
     for r_val, theta_val, text, colour in [
-        (heartwood / 2, 90, f"{heartwood:.0f}mm", "white"),
+        (heartwood / 2, 90, f"{heartwood:.0f}mm", _COLOUR_HEARTWOOD),
         (heartwood + sapwood / 2, 90, f"{sapwood:.0f}mm", "#1a5216"),
         (R - soft_entrance / 2, 180, f"{soft_entrance:.0f}mm", "#8b1a1a"),
         (R - soft_exit / 2, 0, f"{soft_exit:.0f}mm", "#8b1a1a"),

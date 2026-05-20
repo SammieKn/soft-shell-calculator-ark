@@ -38,11 +38,35 @@ class UploadedMeasurements:
 def load_uploaded_measurements(uploaded_file: Any) -> UploadedMeasurements:
     """Build a retaining wall from an uploaded zip or `.rgp` file.
 
+    When the upload contains files from multiple retaining walls, only the
+    first wall (alphabetically by ID) is returned. Use
+    :func:`load_uploaded_measurements_multi` to obtain one result per wall.
+
     Args:
         uploaded_file: VIKTOR `FileResource`-like object with `filename` and `file`.
 
     Returns:
         Uploaded measurements with wall object and validation metadata.
+
+    Raises:
+        ValueError: If no file is provided or the file cannot be processed.
+    """
+    results = load_uploaded_measurements_multi(uploaded_file)
+    return results[0]
+
+
+def load_uploaded_measurements_multi(uploaded_file: Any) -> list[UploadedMeasurements]:
+    """Build one UploadedMeasurements per retaining-wall ID found in the upload.
+
+    When a zip archive contains `.rgp` files from multiple retaining walls,
+    this function returns one :class:`UploadedMeasurements` per unique
+    retaining-wall ID so that each wall can be analysed independently.
+
+    Args:
+        uploaded_file: VIKTOR `FileResource`-like object with `filename` and `file`.
+
+    Returns:
+        List of uploaded measurements, one per retaining-wall ID found.
 
     Raises:
         ValueError: If no file is provided or the file cannot be processed.
@@ -55,17 +79,27 @@ def load_uploaded_measurements(uploaded_file: Any) -> UploadedMeasurements:
 
     with TemporaryDirectory() as temp_dir_str:
         temp_dir = Path(temp_dir_str)
-        uploaded_rgp_count = _materialize_upload(source_filename, file_bytes, temp_dir)
+        _materialize_upload(source_filename, file_bytes, temp_dir)
         skipped_files = _collect_skipped_files(temp_dir)
-        retaining_wall = RetainingWall.from_directory(temp_dir)
+        retaining_walls = RetainingWall.from_directory_multi(temp_dir)
+        per_wall_counts = _count_rgp_files_per_wall(temp_dir)
 
-    return UploadedMeasurements(
-        source_filename=source_filename,
-        retaining_wall=retaining_wall,
-        uploaded_rgp_count=uploaded_rgp_count,
-        valid_rgp_count=uploaded_rgp_count - len(skipped_files),
-        skipped_files=skipped_files,
-    )
+    results: list[UploadedMeasurements] = []
+    for idx, wall in enumerate(retaining_walls):
+        wall_rgp_count = per_wall_counts.get(wall.id, 0)
+        # Skipped files are attributed to the first wall when multiple walls are present
+        wall_skipped = skipped_files if idx == 0 else ()
+        results.append(
+            UploadedMeasurements(
+                source_filename=source_filename,
+                retaining_wall=wall,
+                uploaded_rgp_count=wall_rgp_count,
+                valid_rgp_count=wall_rgp_count - len(wall_skipped),
+                skipped_files=wall_skipped,
+            )
+        )
+
+    return results
 
 
 def _get_source_filename(uploaded_file: Any) -> str:
@@ -225,6 +259,30 @@ def _collect_skipped_files(target_dir: Path) -> tuple[str, ...]:
             skipped_files.append(rgp_file.name)
 
     return tuple(skipped_files)
+
+
+def _count_rgp_files_per_wall(target_dir: Path) -> dict[str, int]:
+    """Count valid `.rgp` files in a directory grouped by retaining-wall ID.
+
+    Only files whose names can be parsed as a :class:`MeasurementIdentifier`
+    are counted. Files with malformed names are ignored.
+
+    Args:
+        target_dir: Directory containing `.rgp` files.
+
+    Returns:
+        Mapping from ``retaining_wall_id`` to the number of files for that wall.
+    """
+    counts: dict[str, int] = {}
+    for rgp_file in sorted(target_dir.glob("*.rgp")):
+        try:
+            identifier = MeasurementIdentifier.from_filename_stem(rgp_file.stem)
+        except ValueError:
+            continue
+        counts[identifier.retaining_wall_id] = (
+            counts.get(identifier.retaining_wall_id, 0) + 1
+        )
+    return counts
 
 
 def peek_wall_id_from_file_resource(uploaded_file: Any) -> str | None:

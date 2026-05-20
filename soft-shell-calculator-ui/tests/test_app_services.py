@@ -19,6 +19,7 @@ from ui_app.services.analysis_service import _fingerprint
 from ui_app.services.export_service import build_pile_csv
 from ui_app.services.export_service import build_batch_csv_zip
 from ui_app.services.upload_service import load_uploaded_measurements
+from ui_app.services.upload_service import load_uploaded_measurements_multi
 from ui_app.services.upload_service import peek_wall_id_from_file_resource
 from ui_app.controller import Controller
 from ui_app.view_models import (
@@ -27,6 +28,7 @@ from ui_app.view_models import (
     WallAnalysisResult,
     WallSummary,
 )
+from tests.conftest import make_rgp_bytes
 
 
 class _InMemoryFileHandle:
@@ -129,6 +131,78 @@ class TestUploadService:
         assert uploaded_measurements.skipped_files == ("invalid_measurement.rgp",)
 
 
+class TestLoadUploadedMeasurementsMulti:
+    def test_single_wall_returns_one_result(self) -> None:
+        """A zip with one Rak should return a list containing one UploadedMeasurements."""
+        zip_content = _build_zip_upload(
+            dict(
+                [
+                    make_rgp_bytes("DYG0101", pile_id="P1.1", measurement_id="BM001"),
+                    make_rgp_bytes("DYG0101", pile_id="P1.2", measurement_id="BM002"),
+                ]
+            )
+        )
+        uploaded_file = FakeUploadedFile("metingen.zip", zip_content)
+
+        results = load_uploaded_measurements_multi(uploaded_file)
+
+        assert len(results) == 1
+        assert results[0].retaining_wall.id == "DYG0101"
+
+    def test_two_raks_return_two_results(self) -> None:
+        """A zip with files from two Raks should return two UploadedMeasurements."""
+        zip_content = _build_zip_upload(
+            dict(
+                [
+                    make_rgp_bytes("LEG0402", pile_id="P2.24", measurement_id="BM065"),
+                    make_rgp_bytes("LYG0902", pile_id="P1.1", measurement_id="BM108"),
+                ]
+            )
+        )
+        uploaded_file = FakeUploadedFile("metingen.zip", zip_content)
+
+        results = load_uploaded_measurements_multi(uploaded_file)
+
+        assert len(results) == 2
+        wall_ids = {r.retaining_wall.id for r in results}
+        assert wall_ids == {"LEG0402", "LYG0902"}
+
+    def test_two_raks_have_correct_rgp_counts(self) -> None:
+        """Each result should count only the files belonging to its own Rak."""
+        zip_content = _build_zip_upload(
+            dict(
+                [
+                    make_rgp_bytes("LEG0402", pile_id="P2.24", measurement_id="BM065"),
+                    make_rgp_bytes("LEG0402", pile_id="P2.24", measurement_id="BM066"),
+                    make_rgp_bytes("LYG0902", pile_id="P1.1", measurement_id="BM108"),
+                ]
+            )
+        )
+        uploaded_file = FakeUploadedFile("metingen.zip", zip_content)
+
+        results = load_uploaded_measurements_multi(uploaded_file)
+        by_id = {r.retaining_wall.id: r for r in results}
+
+        assert by_id["LEG0402"].uploaded_rgp_count == 2
+        assert by_id["LYG0902"].uploaded_rgp_count == 1
+
+    def test_source_filename_is_same_for_all_results(self) -> None:
+        """All results from the same zip should share the same source filename."""
+        zip_content = _build_zip_upload(
+            dict(
+                [
+                    make_rgp_bytes("LEG0402", pile_id="P2.24", measurement_id="BM065"),
+                    make_rgp_bytes("LYG0902", pile_id="P1.1", measurement_id="BM108"),
+                ]
+            )
+        )
+        uploaded_file = FakeUploadedFile("mixed_rak.zip", zip_content)
+
+        results = load_uploaded_measurements_multi(uploaded_file)
+
+        assert all(r.source_filename == "mixed_rak.zip" for r in results)
+
+
 class TestAnalysisService:
     def test_returns_summary_and_pile_rows(self, all_rgp_paths: list[Path]) -> None:
         """Analysis should flatten the uploaded wall into summary and pile rows."""
@@ -195,6 +269,46 @@ class TestBatchAnalysisService:
 
         assert len(batch.wall_results) == 1
         assert "ongeldig.zip" in batch.skipped_walls
+
+    def test_single_zip_with_two_raks_produces_two_wall_results(self) -> None:
+        """A zip containing files from two Raks should yield two WallAnalysisResults."""
+        zip_content = _build_zip_upload(
+            dict(
+                [
+                    make_rgp_bytes("LEG0402", pile_id="P2.24", measurement_id="BM065"),
+                    make_rgp_bytes("LEG0402", pile_id="P2.24", measurement_id="BM066"),
+                    make_rgp_bytes("LYG0902", pile_id="P1.1", measurement_id="BM108"),
+                    make_rgp_bytes("LYG0902", pile_id="P1.2", measurement_id="BM109"),
+                ]
+            )
+        )
+        files = [FakeUploadedFile("mixed_rak.zip", zip_content)]
+
+        batch = analyze_batch_uploaded_measurements(files)
+
+        assert len(batch.wall_results) == 2
+        wall_ids = {r.summary.retaining_wall_id for r in batch.wall_results}
+        assert wall_ids == {"LEG0402", "LYG0902"}
+
+    def test_measurements_not_cross_assigned_between_raks(self) -> None:
+        """Measurements from one Rak must not appear in another Rak's results."""
+        zip_content = _build_zip_upload(
+            dict(
+                [
+                    make_rgp_bytes("LEG0402", pile_id="P2.24", measurement_id="BM065"),
+                    make_rgp_bytes("LYG0902", pile_id="P1.1", measurement_id="BM108"),
+                ]
+            )
+        )
+        files = [FakeUploadedFile("mixed_rak.zip", zip_content)]
+
+        batch = analyze_batch_uploaded_measurements(files)
+
+        by_id = {r.summary.retaining_wall_id: r for r in batch.wall_results}
+        for row in by_id["LEG0402"].pile_rows:
+            assert row.retaining_wall_id == "LEG0402"
+        for row in by_id["LYG0902"].pile_rows:
+            assert row.retaining_wall_id == "LYG0902"
 
 
 class TestGetBatchCaching:

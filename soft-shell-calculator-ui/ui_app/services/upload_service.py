@@ -291,23 +291,50 @@ def peek_wall_id_from_file_resource(uploaded_file: Any) -> str | None:
     Reads the first `.rgp` filename from the zip and parses the wall ID from its
     stem. Avoids loading any measurement data or constructing domain objects.
 
+    When the zip contains files from multiple walls, only the first wall ID
+    (in zip order) is returned. Use :func:`peek_wall_ids_from_file_resource`
+    to obtain all wall IDs.
+
     Args:
         uploaded_file: VIKTOR FileResource-like object.
 
     Returns:
         Retaining wall ID or ``None`` if it cannot be determined.
     """
+    ids = peek_wall_ids_from_file_resource(uploaded_file)
+    return ids[0] if ids else None
+
+
+def peek_wall_ids_from_file_resource(uploaded_file: Any) -> list[str]:
+    """Extract all unique retaining-wall IDs from a zip file resource.
+
+    Reads every `.rgp` filename from the zip central directory and collects
+    all distinct wall IDs found. No measurement data is loaded.
+
+    Args:
+        uploaded_file: VIKTOR FileResource-like object.
+
+    Returns:
+        Sorted list of unique retaining-wall IDs, or an empty list on any error.
+    """
     try:
         file_bytes = _read_uploaded_bytes(uploaded_file)
+        seen: list[str] = []
         with ZipFile(BytesIO(file_bytes)) as archive:
             for name in archive.namelist():
-                if name.lower().endswith(".rgp"):
-                    stem = Path(name).stem
-                    identifier = MeasurementIdentifier.from_filename_stem(stem)
-                    return identifier.retaining_wall_id
+                if not name.lower().endswith(".rgp"):
+                    continue
+                try:
+                    identifier = MeasurementIdentifier.from_filename_stem(
+                        Path(name).stem
+                    )
+                except ValueError:
+                    continue
+                if identifier.retaining_wall_id not in seen:
+                    seen.append(identifier.retaining_wall_id)
+        return sorted(seen)
     except Exception:
-        return None
-    return None
+        return []
 
 
 def peek_pile_ids_from_file_resource(

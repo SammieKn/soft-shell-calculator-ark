@@ -21,6 +21,7 @@ from ui_app.services.export_service import build_batch_csv_zip
 from ui_app.services.upload_service import load_uploaded_measurements
 from ui_app.services.upload_service import load_uploaded_measurements_multi
 from ui_app.services.upload_service import peek_wall_id_from_file_resource
+from ui_app.services.upload_service import peek_wall_ids_from_file_resource
 from ui_app.controller import Controller
 from ui_app.view_models import (
     BatchAnalysisResult,
@@ -388,6 +389,49 @@ class TestPeekWallId:
         wall_id = peek_wall_id_from_file_resource(uploaded_file)
 
         assert wall_id is None
+
+
+class TestPeekWallIds:
+    def test_single_wall_zip_returns_one_id(self) -> None:
+        """A zip with one wall's files should return exactly one wall ID."""
+        zip_content = _build_zip_upload(
+            dict(
+                [
+                    make_rgp_bytes("DYG0101", pile_id="P1.1", measurement_id="BM001"),
+                    make_rgp_bytes("DYG0101", pile_id="P1.2", measurement_id="BM002"),
+                ]
+            )
+        )
+        uploaded_file = FakeUploadedFile("metingen.zip", zip_content)
+
+        ids = peek_wall_ids_from_file_resource(uploaded_file)
+
+        assert ids == ["DYG0101"]
+
+    def test_multi_wall_zip_returns_all_ids(self) -> None:
+        """A zip with files from two walls should return both wall IDs."""
+        zip_content = _build_zip_upload(
+            dict(
+                [
+                    make_rgp_bytes("LEG0402", pile_id="P2.24", measurement_id="BM065"),
+                    make_rgp_bytes("LYG0902", pile_id="P1.1", measurement_id="BM108"),
+                ]
+            )
+        )
+        uploaded_file = FakeUploadedFile("metingen.zip", zip_content)
+
+        ids = peek_wall_ids_from_file_resource(uploaded_file)
+
+        assert set(ids) == {"LEG0402", "LYG0902"}
+        assert ids == sorted(ids)
+
+    def test_returns_empty_list_for_invalid_zip(self) -> None:
+        """Should return an empty list for a corrupt zip."""
+        uploaded_file = FakeUploadedFile("corrupt.zip", b"not a zip")
+
+        ids = peek_wall_ids_from_file_resource(uploaded_file)
+
+        assert ids == []
 
 
 # ---------------------------------------------------------------------------

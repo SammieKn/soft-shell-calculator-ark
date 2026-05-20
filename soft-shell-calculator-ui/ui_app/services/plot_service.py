@@ -200,16 +200,15 @@ def _polar_axis_layout() -> dict:
     """Return the shared polar axis layout dict for Dwarsdoorsnede charts.
 
     Returns:
-        Plotly polar layout dict with radial grid lines every 25 mm (labelled)
-        and a hidden angular axis.
+        Plotly polar layout dict with radial grid lines every 25 mm and a
+        hidden angular axis. Tick labels are suppressed here and added as a
+        separate Scatterpolar trace in _add_polar_traces for full control.
     """
     return {
         "radialaxis": {
             "range": [0, _POLAR_R_LIM],
             "dtick": 25,
-            "showticklabels": True,
-            "ticksuffix": " mm",
-            "tickfont": {"size": 9, "color": "#888888"},
+            "showticklabels": False,
             "gridwidth": 1,
             "gridcolor": "#C0C0C0",
             "layer": "below traces",
@@ -554,11 +553,11 @@ def _add_polar_traces(
     )
 
     # Zone thickness labels inside each zone
-    for r_val, theta_val, text, colour in [
-        (heartwood / 2, 90, f"{heartwood:.0f}mm", _COLOUR_HEARTWOOD),
-        (heartwood + sapwood / 2, 90, f"{sapwood:.0f}mm", "#1a5216"),
-        (R - soft_entrance / 2, 180, f"{soft_entrance:.0f}mm", "#8b1a1a"),
-        (R - soft_exit / 2, 0, f"{soft_exit:.0f}mm", "#8b1a1a"),
+    for r_val, theta_val, text in [
+        (heartwood / 2, 90, f"{heartwood:.0f}mm"),
+        (heartwood + sapwood / 2, 90, f"{sapwood:.0f}mm"),
+        (R - soft_entrance / 2, 180, f"{soft_entrance:.0f}mm"),
+        (R - soft_exit / 2, 0, f"{soft_exit:.0f}mm"),
     ]:
         fig.add_trace(
             go.Scatterpolar(
@@ -566,9 +565,24 @@ def _add_polar_traces(
                 theta=[theta_val],
                 mode="text",
                 text=[text],
-                textfont={"size": 10, "color": colour},
+                textfont={"size": 10, "color": "#000000"},
                 showlegend=False,
                 subplot=polar_ref,
                 hoverinfo="skip",
             )
         )
+
+    # Radial grid labels — placed at 240° (lower-left, avoids all zone labels)
+    grid_ticks = list(range(25, _POLAR_R_LIM + 1, 25))
+    fig.add_trace(
+        go.Scatterpolar(
+            r=grid_ticks,
+            theta=[240] * len(grid_ticks),
+            mode="text",
+            text=[f"{v}" for v in grid_ticks],
+            textfont={"size": 9, "color": "#000000"},
+            showlegend=False,
+            subplot=polar_ref,
+            hoverinfo="skip",
+        )
+    )

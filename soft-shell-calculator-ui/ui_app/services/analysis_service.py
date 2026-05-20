@@ -4,25 +4,17 @@ This module converts the retaining-wall domain model into app-facing result
 structures for summary views, tables, and exports.
 """
 
-import re
-
 from ui_app.services.upload_service import load_uploaded_measurements
 from ui_app.services.upload_service import load_uploaded_measurements_multi
+from ui_app.services.upload_service import _natural_sort_key
 from ui_app.view_models import (
     BatchAnalysisResult,
     PileRow,
     WallAnalysisResult,
     WallSummary,
 )
-from soft_shell_calculator_lib.calculator import (
-    compute_moving_average,
-    compute_overlap_position,
-    filter_signal,
-    trim_signal,
-)
 from soft_shell_calculator_lib.models.retaining_wall import RetainingWall
 from soft_shell_calculator_lib.models.wooden_pile import WoodenPile
-import numpy as np
 
 
 def analyze_uploaded_measurements(uploaded_file: object) -> WallAnalysisResult:
@@ -80,21 +72,6 @@ def _build_pile_rows(retaining_wall: RetainingWall) -> list[PileRow]:
     return sorted(pile_rows, key=lambda row: _natural_sort_key(row.pile_id))
 
 
-def _natural_sort_key(pile_id: str) -> tuple:
-    """Return a sort key for natural ordering of pile IDs.
-
-    Args:
-        pile_id: Pile identifier string such as 'P1.11'.
-
-    Returns:
-        Tuple of alternating string/int parts for correct numeric ordering.
-    """
-    return tuple(
-        int(part) if part.isdigit() else part.lower()
-        for part in re.split(r"(\d+)", pile_id)
-    )
-
-
 def _build_pile_row(
     retaining_wall_id: str,
     construction_part_id: str,
@@ -117,30 +94,6 @@ def _build_pile_row(
         tuple(measurement.drill_signal) for measurement in pile.rpd_measurements
     )
     resolutions = tuple(measurement.resolution for measurement in pile.rpd_measurements)
-
-    # Compute processed (trimmed) signals and moving averages for plotting
-    processed_signals_list: list[tuple[float, ...]] = []
-    moving_averages_list: list[tuple[float, ...]] = []
-    trim_offsets_list: list[float] = []
-    for measurement in pile.rpd_measurements:
-        try:
-            raw = np.array(measurement.drill_signal)
-            res = measurement.resolution
-            filtered, threshold_cut = filter_signal(raw, res)
-            trimmed = trim_signal(filtered)
-            offset = compute_overlap_position(raw, threshold_cut, res)
-            movav = compute_moving_average(trimmed)
-            processed_signals_list.append(tuple(float(v) for v in trimmed))
-            moving_averages_list.append(tuple(float(v) for v in movav))
-            trim_offsets_list.append(float(offset))
-        except Exception:
-            processed_signals_list.append(())
-            moving_averages_list.append(())
-            trim_offsets_list.append(0.0)
-
-    processed_signals = tuple(processed_signals_list)
-    moving_averages = tuple(moving_averages_list)
-    trim_offsets = tuple(trim_offsets_list)
 
     high_drill_amplitude = pile.has_high_drill_amplitude
 
@@ -176,9 +129,6 @@ def _build_pile_row(
             error_message=str(exc),
             drill_signals=drill_signals,
             resolutions=resolutions,
-            processed_signals=processed_signals,
-            moving_averages=moving_averages,
-            trim_offsets=trim_offsets,
         )
 
     warnings = _build_warning_messages(
@@ -206,9 +156,6 @@ def _build_pile_row(
         error_message=None,
         drill_signals=drill_signals,
         resolutions=resolutions,
-        processed_signals=processed_signals,
-        moving_averages=moving_averages,
-        trim_offsets=trim_offsets,
     )
 
 
@@ -321,4 +268,48 @@ def analyze_batch_uploaded_measurements(uploaded_files: list) -> BatchAnalysisRe
     return BatchAnalysisResult(
         wall_results=tuple(wall_results),
         skipped_walls=tuple(skipped_walls),
+    )
+
+
+def apply_validation_filter(
+    batch: BatchAnalysisResult, excluded: set[tuple[str, str]]
+) -> BatchAnalysisResult:
+    """Return a filtered batch with specified piles removed.
+
+    Args:
+        batch: Full batch analysis result.
+        excluded: Set of (retaining_wall_id, pile_id) tuples to exclude.
+
+    Returns:
+        Filtered batch, or the original if excluded is empty.
+    """
+    if not excluded:
+        return batch
+
+    new_wall_results: list[WallAnalysisResult] = []
+    for wall_result in batch.wall_results:
+        new_pile_rows = tuple(
+            row
+            for row in wall_result.pile_rows
+            if (row.retaining_wall_id, row.pile_id) not in excluded
+        )
+        new_summary = WallSummary(
+            source_filename=wall_result.summary.source_filename,
+            retaining_wall_id=wall_result.summary.retaining_wall_id,
+            construction_part_count=wall_result.summary.construction_part_count,
+            pile_count=len(new_pile_rows),
+            measurement_count=sum(r.measurement_count for r in new_pile_rows),
+            valid_file_count=wall_result.summary.valid_file_count,
+            skipped_files=wall_result.summary.skipped_files,
+            failed_pile_count=sum(
+                1 for r in new_pile_rows if r.error_message is not None
+            ),
+            warning_pile_count=sum(1 for r in new_pile_rows if r.warnings),
+        )
+        new_wall_results.append(
+            WallAnalysisResult(summary=new_summary, pile_rows=new_pile_rows)
+        )
+    return BatchAnalysisResult(
+        wall_results=tuple(new_wall_results),
+        skipped_walls=batch.skipped_walls,
     )

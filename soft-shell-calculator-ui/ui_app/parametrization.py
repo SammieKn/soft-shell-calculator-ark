@@ -9,6 +9,7 @@ import viktor as vkt
 
 from ui_app.services.upload_service import peek_wall_ids_from_file_resource
 from ui_app.services.upload_service import peek_pile_ids_from_file_resource
+from ui_app.services.upload_service import _natural_sort_key
 
 
 def _get_wall_options(params, **kwargs) -> list[str]:
@@ -27,15 +28,6 @@ def _get_wall_options(params, **kwargs) -> list[str]:
             if wall_id not in options:
                 options.append(wall_id)
     return sorted(options)
-
-
-def _natural_sort_key(pile_id: str) -> tuple:
-    import re
-
-    return tuple(
-        int(part) if part.isdigit() else part.lower()
-        for part in re.split(r"(\d+)", pile_id)
-    )
 
 
 def _get_pile_options(params, **kwargs) -> list[str]:
@@ -108,6 +100,8 @@ class Parametrization(vkt.Parametrization):
     tab_validatie.palen.kade = vkt.TextField("Kade")
     tab_validatie.palen.constructiedeel = vkt.TextField("Constructiedeel")
     tab_validatie.palen.paal = vkt.TextField("Paal")
+    tab_validatie.palen.meting = vkt.TextField("Meting")
+    tab_validatie.palen.diameter = vkt.NumberField("Diameter [mm]")
     tab_validatie.palen.opnemen = vkt.BooleanField("Opnemen")
 
     tab_resultaten = vkt.Tab("Resultaten")

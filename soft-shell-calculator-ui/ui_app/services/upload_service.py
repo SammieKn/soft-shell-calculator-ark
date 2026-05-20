@@ -285,6 +285,23 @@ def _count_rgp_files_per_wall(target_dir: Path) -> dict[str, int]:
     return counts
 
 
+def _natural_sort_key(pile_id: str) -> tuple:
+    """Return a sort key for natural ordering of pile IDs.
+
+    Args:
+        pile_id: Pile identifier string such as 'P1.11'.
+
+    Returns:
+        Tuple of alternating string/int parts for correct numeric ordering.
+    """
+    import re
+
+    return tuple(
+        int(part) if part.isdigit() else part.lower()
+        for part in re.split(r"(\d+)", pile_id)
+    )
+
+
 def peek_wall_id_from_file_resource(uploaded_file: Any) -> str | None:
     """Extract the retaining-wall ID from a zip file resource without full analysis.
 

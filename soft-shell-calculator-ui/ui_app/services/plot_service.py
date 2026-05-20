@@ -2,9 +2,16 @@
 
 import statistics
 
+import numpy as np
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 
+from soft_shell_calculator_lib.calculator import (
+    compute_moving_average,
+    compute_overlap_position,
+    filter_signal,
+    trim_signal,
+)
 from ui_app.view_models import PileRow, WallAnalysisResult
 
 _COLOUR_SOFT_SHELL = "#F08080"  # light coral
@@ -132,7 +139,7 @@ def build_pile_figure(pile_row: PileRow) -> go.Figure:
     _add_resistance_traces(fig, pile_row, row=1, col=1)
     _add_polar_traces(fig, pile_row, polar_ref="polar", show_legend=True)
 
-    multiple_measurements = len([s for s in pile_row.processed_signals if s]) > 1
+    multiple_measurements = len([s for s in pile_row.drill_signals if s]) > 1
     subtitle = (
         "<br><sup><i style='color:#888888'>Let op: meerdere boringen uitgevoerd, "
         "gemiddelde is genomen voor bepalen van de diktes van de lagen.</i></sup>"
@@ -172,11 +179,21 @@ def _add_resistance_traces(
         col: Subplot column index (1-based).
     """
     # Plot all available measurements; measurement 0 = primary (blue/red), rest = grey
-    for i, proc in enumerate(pile_row.processed_signals):
-        if not proc:
+    first_offset = 0.0
+    for i, raw_signal in enumerate(pile_row.drill_signals):
+        if not raw_signal:
             continue
         resolution = pile_row.resolutions[i] if i < len(pile_row.resolutions) else 1
-        offset_i = pile_row.trim_offsets[i] if i < len(pile_row.trim_offsets) else 0.0
+        try:
+            raw = np.array(raw_signal)
+            filtered, threshold_cut = filter_signal(raw, resolution)
+            proc = trim_signal(filtered)
+            offset_i = float(compute_overlap_position(raw, threshold_cut, resolution))
+            movav = compute_moving_average(proc)
+        except Exception:
+            continue
+        if i == 0:
+            first_offset = offset_i
         proc_depth = [offset_i + j / resolution for j in range(len(proc))]
         is_primary = i == 0
         signal_colour = _COLOUR_PROCESSED if is_primary else _COLOUR_GREY
@@ -205,8 +222,7 @@ def _add_resistance_traces(
         )
 
         # Moving average
-        if i < len(pile_row.moving_averages) and pile_row.moving_averages[i]:
-            movav = pile_row.moving_averages[i]
+        if len(movav) > 0:
             fig.add_trace(
                 go.Scatter(
                     x=proc_depth[: len(movav)],
@@ -233,16 +249,12 @@ def _add_resistance_traces(
     soft_exit = pile_row.soft_shell_exit_mm
     sapwood = pile_row.sapwood_thickness_mm
 
-    if (
-        diameter is None
-        or not pile_row.processed_signals
-        or not pile_row.processed_signals[0]
-    ):
+    if diameter is None or not pile_row.drill_signals or not pile_row.drill_signals[0]:
         fig.update_xaxes(title_text="Diepte [mm]", row=row, col=col)
         fig.update_yaxes(title_text="Weerstand [%]", row=row, col=col)
         return
 
-    offset = pile_row.trim_offsets[0] if pile_row.trim_offsets else 0.0
+    offset = first_offset
     suffix = "" if row == 1 else str(row)
     xref = f"x{suffix}"
     yref = f"y{suffix}"

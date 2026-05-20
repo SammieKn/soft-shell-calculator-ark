@@ -7,7 +7,7 @@ User-facing labels and help text should be kept in Dutch.
 
 import viktor as vkt
 
-from ui_app.services.upload_service import peek_wall_id_from_file_resource
+from ui_app.services.upload_service import peek_wall_ids_from_file_resource
 from ui_app.services.upload_service import peek_pile_ids_from_file_resource
 from ui_app.services.upload_service import _natural_sort_key
 
@@ -19,14 +19,14 @@ def _get_wall_options(params, **kwargs) -> list[str]:
         params: VIKTOR params object.
 
     Returns:
-        List of wall IDs derived from the uploaded zip filenames.
+        Sorted list of wall IDs derived from the uploaded zip filenames.
     """
     files = getattr(getattr(params, "tab_invoer", None), "meetbestanden", None) or []
     options: list[str] = []
     for uploaded_file in files:
-        wall_id = peek_wall_id_from_file_resource(uploaded_file)
-        if wall_id and wall_id not in options:
-            options.append(wall_id)
+        for wall_id in peek_wall_ids_from_file_resource(uploaded_file):
+            if wall_id not in options:
+                options.append(wall_id)
     return sorted(options)
 
 
@@ -50,6 +50,9 @@ def _get_pile_options(params, **kwargs) -> list[str]:
     )
     pile_ids: list[str] = []
     for uploaded_file in files:
+        wall_ids_in_file = peek_wall_ids_from_file_resource(uploaded_file)
+        if selected_wall_id and selected_wall_id not in wall_ids_in_file:
+            continue
         for pid in peek_pile_ids_from_file_resource(uploaded_file, selected_wall_id):
             if pid not in pile_ids:
                 pile_ids.append(pid)
@@ -62,13 +65,13 @@ class Parametrization(vkt.Parametrization):
     tab_invoer = vkt.Tab("Invoer")
     tab_invoer.uitleg = vkt.Text(
         "Upload één of meerdere zip-bestanden met .rgp-metingen. "
-        "Elk zip-bestand vertegenwoordigt één kade. "
+        "Een zip-bestand mag metingen van meerdere kades bevatten. "
         "Na het uploaden kunt u een kade selecteren om de resultaten te bekijken."
     )
     tab_invoer.meetbestanden = vkt.MultiFileField(
         "Meetbestanden",
         file_types=[".zip"],
-        description="Upload één of meerdere zip-bestanden. Elk zip-bestand vertegenwoordigt één kade.",
+        description="Upload één of meerdere zip-bestanden met .rgp-metingen.",
     )
     tab_invoer.geselecteerde_kade = vkt.OptionField(
         "Geselecteerde kade",

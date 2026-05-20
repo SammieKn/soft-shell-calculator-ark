@@ -1,5 +1,6 @@
 """Pytest configuration and shared fixtures for soft-shell-calculator-lib tests."""
 
+import json
 from pathlib import Path
 
 import numpy as np
@@ -34,6 +35,45 @@ def all_rgp_paths() -> list[Path]:
     if not rgp_files:
         pytest.skip(f"No .rgp files found in {DATA_DIR}")
     return rgp_files
+
+
+# ---------------------------------------------------------------------------
+# Synthetic .rgp file helpers
+# ---------------------------------------------------------------------------
+
+
+def make_rgp_bytes(
+    wall_id: str = "DYG0101",
+    part_id: str = "CON.A",
+    pile_id: str = "P1.1",
+    measurement_id: str = "BM001",
+    drill: list[float] | None = None,
+) -> tuple[str, bytes]:
+    """Create a minimal valid .rgp file content in memory.
+
+    Args:
+        wall_id: Retaining wall identifier.
+        part_id: Construction part identifier.
+        pile_id: Pile identifier.
+        measurement_id: Measurement identifier.
+        drill: Drill signal values. Defaults to a short synthetic signal.
+
+    Returns:
+        Tuple of ``(filename, bytes)`` for use with zip archives or tmp files.
+    """
+    if drill is None:
+        drill = [float(v) for v in range(1, 101)]
+    filename = f"{wall_id}_{part_id}_{pile_id}_{measurement_id}.rgp"
+    content = {
+        "header": {
+            "dateYear": 2024,
+            "dateMonth": 1,
+            "dateDay": 15,
+            "resolutionFeed": 10,
+        },
+        "profile": {"drill": drill},
+    }
+    return filename, json.dumps(content).encode("utf-8")
 
 
 # ---------------------------------------------------------------------------

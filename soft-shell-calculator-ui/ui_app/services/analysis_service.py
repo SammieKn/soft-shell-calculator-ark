@@ -4,7 +4,9 @@ This module converts the retaining-wall domain model into app-facing result
 structures for summary views, tables, and exports.
 """
 
-from ui_app.services.upload_service import load_uploaded_measurements, _natural_sort_key
+from ui_app.services.upload_service import load_uploaded_measurements
+from ui_app.services.upload_service import load_uploaded_measurements_multi
+from ui_app.services.upload_service import _natural_sort_key
 from ui_app.view_models import (
     BatchAnalysisResult,
     PileRow,
@@ -213,9 +215,12 @@ def get_batch(uploaded_files: list) -> BatchAnalysisResult:
 
 
 def analyze_batch_uploaded_measurements(uploaded_files: list) -> BatchAnalysisResult:
-    """Analyze multiple uploaded zip files, one per retaining wall.
+    """Analyze multiple uploaded zip files, expanding multi-Rak zips automatically.
 
-    Files that fail analysis are skipped and recorded in ``skipped_walls``.
+    Each zip may contain `.rgp` files for one or more retaining walls. When a
+    single zip contains files from multiple walls, a separate
+    :class:`WallAnalysisResult` is produced for every wall found. Files that
+    fail analysis are skipped and recorded in ``skipped_walls``.
 
     Args:
         uploaded_files: List of VIKTOR FileResource-like objects.
@@ -229,10 +234,36 @@ def analyze_batch_uploaded_measurements(uploaded_files: list) -> BatchAnalysisRe
     for uploaded_file in uploaded_files:
         source_filename = getattr(uploaded_file, "filename", "onbekend bestand")
         try:
-            result = analyze_uploaded_measurements(uploaded_file)
-            wall_results.append(result)
+            per_wall = load_uploaded_measurements_multi(uploaded_file)
         except Exception:
             skipped_walls.append(source_filename)
+            continue
+
+        for uploaded_measurements in per_wall:
+            try:
+                pile_rows = _build_pile_rows(uploaded_measurements.retaining_wall)
+                failed_pile_count = sum(
+                    1 for row in pile_rows if row.error_message is not None
+                )
+                warning_pile_count = sum(1 for row in pile_rows if row.warnings)
+                summary = WallSummary(
+                    source_filename=uploaded_measurements.source_filename,
+                    retaining_wall_id=uploaded_measurements.retaining_wall.id,
+                    construction_part_count=len(
+                        uploaded_measurements.retaining_wall.construction_parts
+                    ),
+                    pile_count=len(pile_rows),
+                    measurement_count=sum(row.measurement_count for row in pile_rows),
+                    valid_file_count=uploaded_measurements.valid_rgp_count,
+                    skipped_files=uploaded_measurements.skipped_files,
+                    failed_pile_count=failed_pile_count,
+                    warning_pile_count=warning_pile_count,
+                )
+                wall_results.append(
+                    WallAnalysisResult(summary=summary, pile_rows=tuple(pile_rows))
+                )
+            except Exception:
+                skipped_walls.append(source_filename)
 
     return BatchAnalysisResult(
         wall_results=tuple(wall_results),

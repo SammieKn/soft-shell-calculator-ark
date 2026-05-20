@@ -216,6 +216,8 @@ class Controller(vkt.Controller):
                 "kade": pile_row.retaining_wall_id,
                 "constructiedeel": pile_row.construction_part_id,
                 "paal": pile_row.pile_id,
+                "meting": ", ".join(pile_row.measurement_ids),
+                "diameter": pile_row.diameter_mm,
                 "opnemen": True,
             }
             for wall_result in batch.wall_results

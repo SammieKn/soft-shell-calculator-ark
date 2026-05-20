@@ -108,6 +108,8 @@ class Parametrization(vkt.Parametrization):
     tab_validatie.palen.kade = vkt.TextField("Kade")
     tab_validatie.palen.constructiedeel = vkt.TextField("Constructiedeel")
     tab_validatie.palen.paal = vkt.TextField("Paal")
+    tab_validatie.palen.meting = vkt.TextField("Meting")
+    tab_validatie.palen.diameter = vkt.NumberField("Diameter [mm]")
     tab_validatie.palen.opnemen = vkt.BooleanField("Opnemen")
 
     tab_resultaten = vkt.Tab("Resultaten")

@@ -41,17 +41,26 @@ See [`soft-shell-calculator-tudelft/README.md`](./soft-shell-calculator-tudelft/
 
 ## Getting started
 
+All Python dependencies are managed by the root `pyproject.toml` via [uv](https://docs.astral.sh/uv/).
+
+### Run the VIKTOR app
+
 ```bash
 cd soft-shell-calculator-ui
-pip install -r requirements.txt
+pip install -r requirements.txt   # into a venv for viktor-cli
 viktor-cli start
 ```
 
-Or run the test suite:
+### Run tests
 
 ```bash
-cd soft-shell-calculator-ui
-uv run pytest tests/ -v
+uv run pytest
+```
+
+### Run the TU Delft desktop app
+
+```bash
+uv run --extra tudelft python soft-shell-calculator-tudelft/main.py
 ```
 
 ## Source recognition

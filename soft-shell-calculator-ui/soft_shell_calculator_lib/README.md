@@ -4,15 +4,7 @@ Backend library for analyzing RPD (Resistograph Pile Drilling) measurements of w
 
 ## Installation
 
-```bash
-pip install .
-```
-
-Or with [uv](https://docs.astral.sh/uv/):
-
-```bash
-uv pip install .
-```
+Dependencies are managed by the root `pyproject.toml`. No separate installation step is needed — `uv run` from the repository root resolves everything automatically.
 
 ## Quick Start
 

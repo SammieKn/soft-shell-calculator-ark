@@ -52,9 +52,10 @@ viktor-cli start
 
 ## Running tests
 
+From the repository root:
+
 ```bash
-cd soft-shell-calculator-ui
-uv run pytest tests/ -v
+uv run pytest
 ```
 
 ## Configuration

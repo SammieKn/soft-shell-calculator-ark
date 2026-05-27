@@ -14,24 +14,25 @@ Original soft shell calculator (v1.1) developed by Anindya and revised by Michel
 
 Only marginal changes have been applied to the original source code:
 
-- Dependency management migrated to [uv](https://docs.astral.sh/uv/) (`pyproject.toml` + `uv.lock`).
+- Dependency management consolidated into the repository root `pyproject.toml`.
 - Minor documentation fixes and code formatting.
 
 No calculation logic has been altered.
 
 ## Installation
 
-Requires [uv](https://docs.astral.sh/uv/) to be installed.
+Requires [uv](https://docs.astral.sh/uv/) to be installed. All dependencies are managed by the root `pyproject.toml`.
 
 ```bash
-cd soft-shell-calculator-tudelft
-uv sync
+uv sync --extra tudelft
 ```
 
 ## Usage
 
+From the repository root:
+
 ```bash
-uv run python main.py
+uv run --extra tudelft python soft-shell-calculator-tudelft/main.py
 ```
 
 This opens the wxPython GUI. Select the input `.rgp` files via the file dialog and follow the on-screen instructions.

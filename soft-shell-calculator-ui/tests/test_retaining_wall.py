@@ -1,10 +1,12 @@
-"""Tests for RetainingWall.from_directory and RetainingWall.from_directory_multi."""
+"""Tests for RetainingWall.from_directory, from_directory_multi, and from_measurements."""
 
+import json
 from pathlib import Path
 
 import pytest
 
 from soft_shell_calculator_lib.models.retaining_wall import RetainingWall
+from soft_shell_calculator_lib.models.rpd_measurement import RPDMeasurement
 from tests.conftest import make_rgp_bytes
 
 
@@ -158,3 +160,96 @@ class TestRetainingWallFromDirectoryMulti:
         wall = RetainingWall.from_directory(tmp_path)
 
         assert wall.id == "AAA0001"
+
+
+class TestRetainingWallFromMeasurements:
+    def _load_measurements(
+        self, tmp_path: Path, specs: list[tuple[str, str, str]]
+    ) -> list[RPDMeasurement]:
+        """Write .rgp files and parse them into RPDMeasurement objects."""
+        measurements = []
+        for wall_id, pile_id, measurement_id in specs:
+            filename, content = make_rgp_bytes(
+                wall_id=wall_id, pile_id=pile_id, measurement_id=measurement_id
+            )
+            path = tmp_path / filename
+            path.write_bytes(content)
+            measurements.append(RPDMeasurement.from_rgp_file(path))
+        return measurements
+
+    def test_single_wall_from_measurements(self, tmp_path: Path) -> None:
+        """Should assemble one wall from pre-loaded measurements."""
+        measurements = self._load_measurements(
+            tmp_path,
+            [
+                ("DYG0101", "P1.1", "BM001"),
+                ("DYG0101", "P1.2", "BM002"),
+            ],
+        )
+
+        walls = RetainingWall.from_measurements(measurements)
+
+        assert len(walls) == 1
+        assert walls[0].id == "DYG0101"
+
+    def test_two_walls_from_measurements(self, tmp_path: Path) -> None:
+        """Should split measurements into separate walls by ID."""
+        measurements = self._load_measurements(
+            tmp_path,
+            [
+                ("LEG0402", "P1.1", "BM001"),
+                ("LYG0902", "P1.1", "BM002"),
+            ],
+        )
+
+        walls = RetainingWall.from_measurements(measurements)
+
+        assert len(walls) == 2
+        assert {w.id for w in walls} == {"LEG0402", "LYG0902"}
+
+    def test_walls_sorted_alphabetically(self, tmp_path: Path) -> None:
+        measurements = self._load_measurements(
+            tmp_path,
+            [
+                ("ZZZ9999", "P1.1", "BM001"),
+                ("AAA0001", "P1.1", "BM002"),
+            ],
+        )
+
+        walls = RetainingWall.from_measurements(measurements)
+
+        assert [w.id for w in walls] == ["AAA0001", "ZZZ9999"]
+
+    def test_measurements_grouped_into_piles(self, tmp_path: Path) -> None:
+        """Two measurements with the same pile key should end up in one WoodenPile."""
+        measurements = self._load_measurements(
+            tmp_path,
+            [
+                ("DYG0101", "P1.1", "BM001"),
+                ("DYG0101", "P1.1", "BM002"),
+            ],
+        )
+
+        walls = RetainingWall.from_measurements(measurements)
+        pile = walls[0].construction_parts[0].wooden_piles[0]
+
+        assert len(pile.rpd_measurements) == 2
+
+    def test_raises_on_empty_list(self) -> None:
+        with pytest.raises(ValueError, match="No measurements"):
+            RetainingWall.from_measurements([])
+
+    def test_equivalent_to_from_directory_multi(
+        self, all_rgp_paths: list[Path]
+    ) -> None:
+        """from_measurements with manually loaded files should produce the same result as from_directory_multi."""
+        directory = all_rgp_paths[0].parent
+        walls_from_dir = RetainingWall.from_directory_multi(directory)
+
+        measurements = [RPDMeasurement.from_rgp_file(p) for p in all_rgp_paths]
+        walls_from_measurements = RetainingWall.from_measurements(measurements)
+
+        assert len(walls_from_dir) == len(walls_from_measurements)
+        for wd, wm in zip(walls_from_dir, walls_from_measurements):
+            assert wd.id == wm.id
+            assert len(wd.construction_parts) == len(wm.construction_parts)

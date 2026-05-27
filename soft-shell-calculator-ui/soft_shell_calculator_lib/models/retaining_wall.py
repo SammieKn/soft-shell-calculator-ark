@@ -121,3 +121,51 @@ class RetainingWall:
             walls.append(cls(id=wall_id, construction_parts=construction_parts))
 
         return walls
+
+    @classmethod
+    def from_measurements(
+        cls, measurements: list[RPDMeasurement]
+    ) -> list["RetainingWall"]:
+        """Assemble RetainingWall instances from pre-loaded measurements.
+
+        Groups the measurements by retaining-wall ID, then by pile and
+        construction part — identical logic to :meth:`from_directory_multi`
+        but without file I/O.
+
+        Args:
+            measurements: List of already-parsed RPDMeasurement objects.
+
+        Returns:
+            List of RetainingWall instances sorted alphabetically by wall ID.
+
+        Raises:
+            ValueError: If the measurements list is empty.
+        """
+        if not measurements:
+            raise ValueError("No measurements provided.")
+
+        wall_measurement_groups: dict[str, list[RPDMeasurement]] = defaultdict(list)
+        for m in measurements:
+            wall_measurement_groups[m.identifier.retaining_wall_id].append(m)
+
+        walls: list[RetainingWall] = []
+        for wall_id, wall_measurements in sorted(wall_measurement_groups.items()):
+            pile_groups: dict[tuple[str, str, str], list[RPDMeasurement]] = defaultdict(
+                list
+            )
+            for m in wall_measurements:
+                pile_groups[m.identifier.pile_key].append(m)
+
+            part_groups: dict[str, list[WoodenPile]] = defaultdict(list)
+            for pile_key, pile_measurements in pile_groups.items():
+                _, construction_part_id, pile_id = pile_key
+                pile = WoodenPile(id=pile_id, rpd_measurements=pile_measurements)
+                part_groups[construction_part_id].append(pile)
+
+            construction_parts = [
+                ConstructionPart(id=part_id, wooden_piles=piles)
+                for part_id, piles in sorted(part_groups.items())
+            ]
+            walls.append(cls(id=wall_id, construction_parts=construction_parts))
+
+        return walls

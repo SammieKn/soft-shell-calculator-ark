@@ -9,7 +9,10 @@ import plotly.graph_objects as go
 import viktor as vkt
 
 from ui_app.parametrization import Parametrization
-from ui_app.services.analysis_service import apply_validation_filter, get_batch
+from ui_app.services.analysis_service import (
+    analyze_batch_uploaded_measurements,
+    apply_validation_filter,
+)
 from ui_app.services.export_service import build_batch_zip
 from ui_app.services.plot_service import (
     build_diameter_histogram,
@@ -35,6 +38,7 @@ _TABLE_HEADERS = [
     "Status",
     "Foutmelding",
 ]
+"""Column headers for the pile-level table view (Dutch labels)."""
 
 
 class Controller(vkt.Controller):
@@ -140,7 +144,9 @@ class Controller(vkt.Controller):
                 column_headers=_TABLE_HEADERS,
             )
 
-        fmt = lambda v: f"{v:.1f}" if v is not None else ""
+        def fmt(v: float | None) -> str:
+            return f"{v:.1f}" if v is not None else ""
+
         table_data = [
             [
                 row.construction_part_id,
@@ -163,7 +169,7 @@ class Controller(vkt.Controller):
     def download_all(self, params, **kwargs):
         """Return a zip archive with CSV, JSON and HTML pile report for every wall."""
         files = self._get_uploaded_files(params)
-        batch = get_batch(files)
+        batch = analyze_batch_uploaded_measurements(files)
         batch = apply_validation_filter(batch, self._excluded_piles(params))
         zip_bytes = build_batch_zip(batch)
         return vkt.DownloadResult(
@@ -210,7 +216,7 @@ class Controller(vkt.Controller):
         files = self._get_uploaded_files(params)
         if not files:
             return vkt.SetParamsResult({})
-        batch = get_batch(files)
+        batch = analyze_batch_uploaded_measurements(files)
         table_rows = [
             {
                 "kade": pile_row.retaining_wall_id,
@@ -240,7 +246,7 @@ class Controller(vkt.Controller):
         files = self._get_uploaded_files(params)
         if not files:
             return BatchAnalysisResult(wall_results=(), skipped_walls=()), None
-        batch = get_batch(files)
+        batch = analyze_batch_uploaded_measurements(files)
         batch = apply_validation_filter(batch, self._excluded_piles(params))
         selected_wall_id = getattr(params.tab_invoer, "geselecteerde_kade", None)
         return batch, self._find_wall_result(batch, selected_wall_id)

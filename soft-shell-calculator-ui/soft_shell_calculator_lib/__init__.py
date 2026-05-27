@@ -9,7 +9,11 @@ from soft_shell_calculator_lib.models.construction_part import ConstructionPart
 from soft_shell_calculator_lib.models.retaining_wall import RetainingWall
 from soft_shell_calculator_lib.models.rpd_measurement import RPDMeasurement
 from soft_shell_calculator_lib.models.wooden_pile import WoodenPile
-from soft_shell_calculator_lib.utils import MeasurementIdentifier
+from soft_shell_calculator_lib.utils import (
+    MeasurementIdentifier,
+    natural_sort_key,
+    pair_measurements,
+)
 
 __all__ = [
     "MeasurementIdentifier",
@@ -17,4 +21,6 @@ __all__ = [
     "WoodenPile",
     "ConstructionPart",
     "RetainingWall",
+    "natural_sort_key",
+    "pair_measurements",
 ]

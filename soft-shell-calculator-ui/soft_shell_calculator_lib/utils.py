@@ -1,6 +1,7 @@
 """A collection of utility functions for the soft shell calculator library."""
 
 import logging
+import re
 from collections import defaultdict
 from dataclasses import dataclass
 
@@ -170,3 +171,21 @@ def pair_measurements(names: list[str]) -> list[tuple[str, str]]:
             )
 
     return pairs
+
+
+def natural_sort_key(value: str) -> tuple:
+    """Return a sort key for natural ordering of identifier strings.
+
+    Splits the string into alternating text/numeric parts so that e.g.
+    ``P1.2`` sorts before ``P1.11``.
+
+    Args:
+        value: Identifier string such as ``'P1.11'``.
+
+    Returns:
+        Tuple of alternating string/int parts for correct numeric ordering.
+    """
+    return tuple(
+        int(part) if part.isdigit() else part.lower()
+        for part in re.split(r"(\d+)", value)
+    )

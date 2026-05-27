@@ -12,18 +12,14 @@ from dataclasses import dataclass
 from pathlib import Path
 from zipfile import ZipFile
 
-from ui_app.services.analysis_service import analyze_uploaded_measurements
 from ui_app.services.analysis_service import analyze_batch_uploaded_measurements
 from ui_app.services.analysis_service import apply_validation_filter
-from ui_app.services.analysis_service import get_batch
-from ui_app.services.analysis_service import _fingerprint
 from ui_app.services.export_service import build_pile_csv
 from ui_app.services.export_service import build_batch_csv_zip
 from ui_app.services.upload_service import load_uploaded_measurements
 from ui_app.services.upload_service import load_uploaded_measurements_multi
 from ui_app.services.upload_service import peek_wall_id_from_file_resource
 from ui_app.services.upload_service import peek_wall_ids_from_file_resource
-from ui_app.controller import Controller
 from ui_app.view_models import (
     BatchAnalysisResult,
     PileRow,
@@ -205,21 +201,6 @@ class TestLoadUploadedMeasurementsMulti:
         assert all(r.source_filename == "mixed_rak.zip" for r in results)
 
 
-class TestAnalysisService:
-    def test_returns_summary_and_pile_rows(self, all_rgp_paths: list[Path]) -> None:
-        """Analysis should flatten the uploaded wall into summary and pile rows."""
-        zip_content = _build_zip_upload(
-            {path.name: _read_file_bytes(path) for path in all_rgp_paths[:4]}
-        )
-        uploaded_file = FakeUploadedFile("metingen.zip", zip_content)
-
-        analysis_result = analyze_uploaded_measurements(uploaded_file)
-
-        assert analysis_result.summary.valid_file_count == 4
-        assert analysis_result.summary.pile_count == len(analysis_result.pile_rows)
-        assert analysis_result.pile_rows
-
-
 class TestExportService:
     def test_build_pile_csv_contains_headers_and_rows(
         self, all_rgp_paths: list[Path]
@@ -229,7 +210,8 @@ class TestExportService:
             {path.name: _read_file_bytes(path) for path in all_rgp_paths[:2]}
         )
         uploaded_file = FakeUploadedFile("metingen.zip", zip_content)
-        analysis_result = analyze_uploaded_measurements(uploaded_file)
+        batch = analyze_batch_uploaded_measurements([uploaded_file])
+        analysis_result = batch.wall_results[0]
 
         csv_content = build_pile_csv(analysis_result).decode("utf-8")
 
@@ -311,34 +293,6 @@ class TestBatchAnalysisService:
             assert row.retaining_wall_id == "LEG0402"
         for row in by_id["LYG0902"].pile_rows:
             assert row.retaining_wall_id == "LYG0902"
-
-
-class TestGetBatchCaching:
-    """Tests for the in-process batch result cache in get_batch."""
-
-    def test_same_files_return_identical_object(
-        self, all_rgp_paths: list[Path]
-    ) -> None:
-        """Calling get_batch twice with the same files returns the exact same object."""
-        import ui_app.services.analysis_service as svc
-
-        zip_content = _build_zip_upload(
-            {path.name: _read_file_bytes(path) for path in all_rgp_paths[:3]}
-        )
-        files = [FakeUploadedFile("kade_cache.zip", zip_content)]
-        svc._batch_cache.clear()
-
-        first = get_batch(files)
-        second = get_batch(files)
-
-        assert first is second
-
-    def test_fingerprint_is_order_independent(self) -> None:
-        """The fingerprint must be the same regardless of file order."""
-        file_a = FakeUploadedFile("alpha.zip", b"")
-        file_b = FakeUploadedFile("beta.zip", b"")
-
-        assert _fingerprint([file_a, file_b]) == _fingerprint([file_b, file_a])
 
 
 class TestBatchExportService:

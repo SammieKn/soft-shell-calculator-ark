@@ -7,9 +7,9 @@ User-facing labels and help text should be kept in Dutch.
 
 import viktor as vkt
 
+from soft_shell_calculator_lib.utils import natural_sort_key
 from ui_app.services.upload_service import peek_wall_ids_from_file_resource
 from ui_app.services.upload_service import peek_pile_ids_from_file_resource
-from ui_app.services.upload_service import _natural_sort_key
 
 
 def _get_wall_options(params, **kwargs) -> list[str]:
@@ -56,7 +56,7 @@ def _get_pile_options(params, **kwargs) -> list[str]:
         for pid in peek_pile_ids_from_file_resource(uploaded_file, selected_wall_id):
             if pid not in pile_ids:
                 pile_ids.append(pid)
-    return sorted(pile_ids, key=_natural_sort_key)
+    return sorted(pile_ids, key=natural_sort_key)
 
 
 class Parametrization(vkt.Parametrization):

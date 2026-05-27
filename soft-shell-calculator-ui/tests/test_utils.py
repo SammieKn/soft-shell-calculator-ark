@@ -2,7 +2,11 @@
 
 import pytest
 
-from soft_shell_calculator_lib.utils import MeasurementIdentifier, pair_measurements
+from soft_shell_calculator_lib.utils import (
+    MeasurementIdentifier,
+    natural_sort_key,
+    pair_measurements,
+)
 
 
 class TestMeasurementIdentifierFromFilenameStem:
@@ -157,3 +161,27 @@ class TestPairMeasurements:
         result = pair_measurements(names)
         assert isinstance(result, list)
         assert all(isinstance(p, tuple) and len(p) == 2 for p in result)
+
+
+class TestNaturalSortKey:
+    def test_numeric_parts_sort_correctly(self) -> None:
+        """P1.2 should sort before P1.11."""
+        items = ["P1.11", "P1.2", "P1.1"]
+        result = sorted(items, key=natural_sort_key)
+        assert result == ["P1.1", "P1.2", "P1.11"]
+
+    def test_alphabetic_parts_sort_case_insensitive(self) -> None:
+        assert natural_sort_key("CON.A") == natural_sort_key("con.a")
+
+    def test_pure_numeric_string(self) -> None:
+        items = ["100", "20", "3"]
+        result = sorted(items, key=natural_sort_key)
+        assert result == ["3", "20", "100"]
+
+    def test_mixed_prefix(self) -> None:
+        items = ["BM100", "BM9", "BM22"]
+        result = sorted(items, key=natural_sort_key)
+        assert result == ["BM9", "BM22", "BM100"]
+
+    def test_empty_string(self) -> None:
+        assert natural_sort_key("") == ("",)

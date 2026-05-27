@@ -4,6 +4,7 @@ This module validates uploaded files, extracts zip archives to a temporary
 working directory, and builds the retaining-wall domain object used by the UI.
 """
 
+from collections import defaultdict
 from dataclasses import dataclass
 from io import BytesIO
 from pathlib import Path
@@ -80,21 +81,21 @@ def load_uploaded_measurements_multi(uploaded_file: Any) -> list[UploadedMeasure
     with TemporaryDirectory() as temp_dir_str:
         temp_dir = Path(temp_dir_str)
         _materialize_upload(source_filename, file_bytes, temp_dir)
-        skipped_files = _collect_skipped_files(temp_dir)
-        retaining_walls = RetainingWall.from_directory_multi(temp_dir)
-        per_wall_counts = _count_rgp_files_per_wall(temp_dir)
+        measurements, skipped_files, per_wall_counts = _parse_rgp_directory(temp_dir)
+
+    retaining_walls = RetainingWall.from_measurements(measurements)
 
     results: list[UploadedMeasurements] = []
     for idx, wall in enumerate(retaining_walls):
-        wall_rgp_count = per_wall_counts.get(wall.id, 0)
+        wall_valid_count = per_wall_counts.get(wall.id, 0)
         # Skipped files are attributed to the first wall when multiple walls are present
         wall_skipped = skipped_files if idx == 0 else ()
         results.append(
             UploadedMeasurements(
                 source_filename=source_filename,
                 retaining_wall=wall,
-                uploaded_rgp_count=wall_rgp_count,
-                valid_rgp_count=wall_rgp_count - len(wall_skipped),
+                uploaded_rgp_count=wall_valid_count + len(wall_skipped),
+                valid_rgp_count=wall_valid_count,
                 skipped_files=wall_skipped,
             )
         )
@@ -242,64 +243,39 @@ def _deduplicate_filename(filename: str, used_names: set[str]) -> str:
     return candidate
 
 
-def _collect_skipped_files(target_dir: Path) -> tuple[str, ...]:
-    """Return filenames that cannot be parsed as valid measurements.
+def _parse_rgp_directory(
+    target_dir: Path,
+) -> tuple[list[RPDMeasurement], tuple[str, ...], dict[str, int]]:
+    """Parse all .rgp files in a directory in a single pass.
+
+    Loads each file once, collecting valid measurements, skipped filenames,
+    and per-wall file counts.
 
     Args:
-        target_dir: Temporary directory containing `.rgp` files.
+        target_dir: Directory containing .rgp files.
 
     Returns:
-        Sorted tuple of skipped filenames.
+        Tuple of (measurements, skipped_files, per_wall_counts).
+
+    Raises:
+        ValueError: If no valid measurements could be loaded.
     """
+    measurements: list[RPDMeasurement] = []
     skipped_files: list[str] = []
+    per_wall_counts: dict[str, int] = defaultdict(int)
+
     for rgp_file in sorted(target_dir.glob("*.rgp")):
         try:
-            RPDMeasurement.from_rgp_file(rgp_file)
+            measurement = RPDMeasurement.from_rgp_file(rgp_file)
+            measurements.append(measurement)
+            per_wall_counts[measurement.identifier.retaining_wall_id] += 1
         except (ValueError, KeyError):
             skipped_files.append(rgp_file.name)
 
-    return tuple(skipped_files)
+    if not measurements:
+        raise ValueError("Geen geldige metingen gevonden in het geuploade bestand.")
 
-
-def _count_rgp_files_per_wall(target_dir: Path) -> dict[str, int]:
-    """Count valid `.rgp` files in a directory grouped by retaining-wall ID.
-
-    Only files whose names can be parsed as a :class:`MeasurementIdentifier`
-    are counted. Files with malformed names are ignored.
-
-    Args:
-        target_dir: Directory containing `.rgp` files.
-
-    Returns:
-        Mapping from ``retaining_wall_id`` to the number of files for that wall.
-    """
-    counts: dict[str, int] = {}
-    for rgp_file in sorted(target_dir.glob("*.rgp")):
-        try:
-            identifier = MeasurementIdentifier.from_filename_stem(rgp_file.stem)
-        except ValueError:
-            continue
-        counts[identifier.retaining_wall_id] = (
-            counts.get(identifier.retaining_wall_id, 0) + 1
-        )
-    return counts
-
-
-def _natural_sort_key(pile_id: str) -> tuple:
-    """Return a sort key for natural ordering of pile IDs.
-
-    Args:
-        pile_id: Pile identifier string such as 'P1.11'.
-
-    Returns:
-        Tuple of alternating string/int parts for correct numeric ordering.
-    """
-    import re
-
-    return tuple(
-        int(part) if part.isdigit() else part.lower()
-        for part in re.split(r"(\d+)", pile_id)
-    )
+    return measurements, tuple(sorted(skipped_files)), dict(per_wall_counts)
 
 
 def peek_wall_id_from_file_resource(uploaded_file: Any) -> str | None:

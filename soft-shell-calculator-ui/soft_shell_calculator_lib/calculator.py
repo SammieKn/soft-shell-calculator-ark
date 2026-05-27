@@ -160,6 +160,28 @@ def compute_moving_average(pile_signal: np.ndarray) -> np.ndarray:
     return movav
 
 
+def _smooth_signal(pile_signal: np.ndarray) -> np.ndarray:
+    """Apply Savitzky-Golay smoothing to the pile signal.
+
+    Args:
+        pile_signal: Trimmed pile signal from ``trim_signal``.
+
+    Returns:
+        Smoothed signal array.
+
+    Raises:
+        ValueError: If the signal is too short for the filter window.
+    """
+    if len(pile_signal) <= SG_FILTER_WINDOW_LENGTH:
+        raise ValueError(
+            f"Pile signal (length {len(pile_signal)}) is too short for "
+            f"Savitzky-Golay filter (window {SG_FILTER_WINDOW_LENGTH})."
+        )
+    return np.asarray(
+        savgol_filter(pile_signal, SG_FILTER_WINDOW_LENGTH, SG_FILTER_POLY_ORDER)
+    )
+
+
 def count_annual_rings(pile_signal: np.ndarray, resolution: float) -> int:
     """Estimate the number of annual growth rings.
 
@@ -177,13 +199,7 @@ def count_annual_rings(pile_signal: np.ndarray, resolution: float) -> int:
     Raises:
         ValueError: If the signal is too short for the Savitzky-Golay filter.
     """
-    if len(pile_signal) <= SG_FILTER_WINDOW_LENGTH:
-        raise ValueError(
-            f"Pile signal (length {len(pile_signal)}) is too short for "
-            f"Savitzky-Golay filter (window {SG_FILTER_WINDOW_LENGTH})."
-        )
-
-    smoothed = savgol_filter(pile_signal, SG_FILTER_WINDOW_LENGTH, SG_FILTER_POLY_ORDER)
+    smoothed = _smooth_signal(pile_signal)
     peaks, _ = find_peaks(smoothed, distance=PEAK_MIN_DISTANCE_FRACTION * resolution)
     return round(len(peaks) / 2)
 
@@ -211,13 +227,7 @@ def estimate_growth_rate(
         ValueError: If no peaks are found in either outer zone, which
             prevents a meaningful growth rate estimate.
     """
-    if len(pile_signal) <= SG_FILTER_WINDOW_LENGTH:
-        raise ValueError(
-            f"Pile signal (length {len(pile_signal)}) is too short for "
-            f"Savitzky-Golay filter (window {SG_FILTER_WINDOW_LENGTH})."
-        )
-
-    smoothed = savgol_filter(pile_signal, SG_FILTER_WINDOW_LENGTH, SG_FILTER_POLY_ORDER)
+    smoothed = _smooth_signal(pile_signal)
     radius = diameter / 2
     min_peak_distance = PEAK_MIN_DISTANCE_FRACTION * resolution
 

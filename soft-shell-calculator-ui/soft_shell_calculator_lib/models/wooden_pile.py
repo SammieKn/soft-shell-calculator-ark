@@ -56,6 +56,10 @@ class WoodenPile:
     def _results(self) -> list[_MeasurementResult]:
         """Process all measurements and cache the computed results.
 
+        Note:
+            Uses cached_property for performance. Do not mutate
+            ``rpd_measurements`` after first access to any property.
+
         Returns:
             List of computed results, one entry per measurement.
 

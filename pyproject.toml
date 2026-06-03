@@ -13,7 +13,6 @@ dependencies = [
     "pytest>=7.0",
     "matplotlib>=3.10.9",
     "xlsxwriter>=3.2.9",
-    "wxpython>=4.2.5",
 ]
 
 [project.optional-dependencies]

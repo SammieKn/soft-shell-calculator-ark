@@ -1,0 +1,26 @@
+[project]
+name = "soft-shell-calculator-ark"
+version = "0.1.0"
+description = "RPD measurement analysis for wooden foundation piles."
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "numpy>=1.26.0",
+    "scipy>=1.11.0",
+    "plotly",
+    "openpyxl>=3.1.5",
+    "pandas>=3.0.2",
+    "pytest>=7.0",
+    "matplotlib>=3.10.9",
+    "xlsxwriter>=3.2.9",
+]
+
+[project.optional-dependencies]
+tudelft = [
+    "matplotlib>=3.10.0",
+    "wxpython>=4.2.5",
+    "xlsxwriter>=3.2.9",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["soft-shell-calculator-ui/tests"]

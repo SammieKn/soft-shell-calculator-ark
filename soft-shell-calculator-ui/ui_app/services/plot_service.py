@@ -394,20 +394,23 @@ def _add_resistance_traces(
         )
 
     # Vertical dashed KPI lines — boundaries consistent with vrect geometry
+    _KPI_DIAMETER = "#D07000"  # orange for pile diameter (start of sapwood)
+    _KPI_SPINT = "#228B22"  # forest green for end of sapwood
     _KPI_SOFT = "#E05050"  # coral-red for soft shell boundaries
-    _KPI_SPINT = "#D07000"  # orange for sapwood boundaries
     _KPI_CENTRE = "#888888"  # grey for centre
 
     kpi_shapes: list[tuple[float, str, str]] = [
+        (offset, _KPI_DIAMETER, "dash"),  # pile diameter (left)
+        (pile_end, _KPI_DIAMETER, "dash"),  # pile diameter (right)
         (centre, _KPI_CENTRE, "dot"),  # centre of pile
     ]
     if soft_entrance:
         kpi_shapes.append((offset + soft_entrance, _KPI_SOFT, "dash"))
     if soft_exit:
-        kpi_shapes.append((offset + diameter - soft_exit, _KPI_SOFT, "dash"))
-    if heartwood is not None and sapwood is not None:
-        kpi_shapes.append((centre - heartwood - sapwood, _KPI_SPINT, "dashdot"))
-        kpi_shapes.append((centre + heartwood + sapwood, _KPI_SPINT, "dashdot"))
+        kpi_shapes.append((pile_end - soft_exit, _KPI_SOFT, "dash"))
+    if heartwood is not None:
+        kpi_shapes.append((centre - heartwood, _KPI_SPINT, "dashdot"))
+        kpi_shapes.append((centre + heartwood, _KPI_SPINT, "dashdot"))
 
     for x_val, colour, dash in kpi_shapes:
         fig.add_shape(
@@ -423,14 +426,10 @@ def _add_resistance_traces(
 
     # Invisible dummy traces so KPI lines appear in the legend
     _legend_lines: list[tuple[str, str, str, bool]] = [
-        ("Midden", _KPI_CENTRE, "dot", True),
+        ("Diameter paal", _KPI_DIAMETER, "dash", True),
         ("Zachte schil", _KPI_SOFT, "dash", bool(soft_entrance or soft_exit)),
-        (
-            "Spinthout",
-            _KPI_SPINT,
-            "dashdot",
-            heartwood is not None and sapwood is not None,
-        ),
+        ("Spinthout", _KPI_SPINT, "dashdot", heartwood is not None),
+        ("Midden", _KPI_CENTRE, "dot", True),
     ]
     first = True
     for name, colour, dash, enabled in _legend_lines:

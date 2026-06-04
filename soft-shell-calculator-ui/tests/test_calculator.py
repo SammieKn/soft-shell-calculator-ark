@@ -18,7 +18,6 @@ from soft_shell_calculator_lib.calculator import (
     trim_signal,
 )
 
-
 # ---------------------------------------------------------------------------
 # filter_signal
 # ---------------------------------------------------------------------------
@@ -47,6 +46,7 @@ class TestFilterSignal:
     def test_real_rgp_signal(self, sample_rgp_path) -> None:
         """filter_signal should succeed on a real .rgp signal."""
         import json
+
         with open(sample_rgp_path) as f:
             data = json.load(f)
         drill_amp = np.array(data["profile"]["drill"])
@@ -62,7 +62,9 @@ class TestFilterSignal:
 
 
 class TestTrimSignal:
-    def test_outputs_shorter_than_input(self, synthetic_drill_amp: np.ndarray, resolution: int) -> None:
+    def test_outputs_shorter_than_input(
+        self, synthetic_drill_amp: np.ndarray, resolution: int
+    ) -> None:
         """The trimmed signal should be shorter than the raw input."""
         filtered, _ = filter_signal(synthetic_drill_amp, resolution)
         pile = trim_signal(filtered)
@@ -81,6 +83,7 @@ class TestTrimSignal:
     def test_real_rgp_signal(self, sample_rgp_path) -> None:
         """trim_signal should succeed on a filtered real .rgp signal."""
         import json
+
         with open(sample_rgp_path) as f:
             data = json.load(f)
         drill_amp = np.array(data["profile"]["drill"])
@@ -96,14 +99,20 @@ class TestTrimSignal:
 
 
 class TestComputeOverlapPosition:
-    def test_returns_float(self, synthetic_drill_amp: np.ndarray, resolution: int) -> None:
+    def test_returns_float(
+        self, synthetic_drill_amp: np.ndarray, resolution: int
+    ) -> None:
         result = compute_overlap_position(synthetic_drill_amp, 5.0, resolution)
         assert isinstance(result, float)
 
-    def test_result_at_least_threshold_cut(self, synthetic_drill_amp: np.ndarray, resolution: int) -> None:
+    def test_result_at_least_threshold_cut(
+        self, synthetic_drill_amp: np.ndarray, resolution: int
+    ) -> None:
         """Result should never be less than threshold_cut."""
         threshold_cut = 3.0
-        result = compute_overlap_position(synthetic_drill_amp, threshold_cut, resolution)
+        result = compute_overlap_position(
+            synthetic_drill_amp, threshold_cut, resolution
+        )
         assert result >= threshold_cut
 
     def test_flat_signal_returns_threshold_cut(self, resolution: int) -> None:
@@ -134,6 +143,7 @@ class TestEstimateDiameter:
     def test_real_signal_diameter_plausible(self, sample_rgp_path) -> None:
         """Diameter from a real signal should be between 100 mm and 500 mm."""
         import json
+
         with open(sample_rgp_path) as f:
             data = json.load(f)
         drill_amp = np.array(data["profile"]["drill"])
@@ -165,7 +175,9 @@ class TestComputeMovingAverage:
         movav = compute_moving_average(synthetic_pile_signal)
         assert np.all(np.isfinite(movav))
 
-    def test_smoothing_reduces_variance(self, synthetic_pile_signal: np.ndarray) -> None:
+    def test_smoothing_reduces_variance(
+        self, synthetic_pile_signal: np.ndarray
+    ) -> None:
         """Moving average should have lower variance than the original signal."""
         movav = compute_moving_average(synthetic_pile_signal)
         assert np.var(movav) < np.var(synthetic_pile_signal)
@@ -177,7 +189,9 @@ class TestComputeMovingAverage:
 
 
 class TestCountAnnualRings:
-    def test_returns_positive_integer(self, synthetic_pile_signal: np.ndarray, resolution: int) -> None:
+    def test_returns_positive_integer(
+        self, synthetic_pile_signal: np.ndarray, resolution: int
+    ) -> None:
         rings = count_annual_rings(synthetic_pile_signal, resolution)
         assert isinstance(rings, int)
         assert rings > 0
@@ -191,6 +205,7 @@ class TestCountAnnualRings:
     def test_real_signal_rings_plausible(self, sample_rgp_path) -> None:
         """Ring count from a real signal should be between 10 and 300."""
         import json
+
         with open(sample_rgp_path) as f:
             data = json.load(f)
         drill_amp = np.array(data["profile"]["drill"])
@@ -207,7 +222,9 @@ class TestCountAnnualRings:
 
 
 class TestEstimateGrowthRate:
-    def test_returns_positive_float(self, synthetic_pile_signal: np.ndarray, resolution: int) -> None:
+    def test_returns_positive_float(
+        self, synthetic_pile_signal: np.ndarray, resolution: int
+    ) -> None:
         diameter = estimate_diameter(synthetic_pile_signal, resolution)
         growth_rate = estimate_growth_rate(synthetic_pile_signal, diameter, resolution)
         assert isinstance(growth_rate, float)
@@ -219,15 +236,16 @@ class TestEstimateGrowthRate:
             estimate_growth_rate(short_signal, 1.0, resolution)
 
     def test_raises_when_no_peaks_in_outer_zone(self, resolution: int) -> None:
-        """A flat signal in the outer zone should raise ValueError."""
-        flat_signal = np.ones(2000)
-        diameter = estimate_diameter(flat_signal, resolution)
+        """A monotonic signal (no local maxima) should raise ValueError."""
+        monotonic_signal = np.linspace(1.0, 100.0, 2000)
+        diameter = estimate_diameter(monotonic_signal, resolution)
         with pytest.raises(ValueError, match="No peaks found"):
-            estimate_growth_rate(flat_signal, diameter, resolution)
+            estimate_growth_rate(monotonic_signal, diameter, resolution)
 
     def test_real_signal_growth_rate_plausible(self, sample_rgp_path) -> None:
         """Growth rate from a real signal should be between 0.5 mm/ring and 20 mm/ring."""
         import json
+
         with open(sample_rgp_path) as f:
             data = json.load(f)
         drill_amp = np.array(data["profile"]["drill"])
@@ -265,6 +283,7 @@ class TestEstimateSapwoodWidth:
     def test_known_formula_output(self) -> None:
         """Verify a known result against the formula: 37.17 * r^0.95 / (1 + 5.58 * exp(-0.054 * n))."""
         import math
+
         r, n = 2.0, 80
         expected = round(37.17 * r**0.95 / (1 + 5.58 * math.exp(-0.054 * n)))
         assert estimate_sapwood_width(r, n) == pytest.approx(expected)
@@ -276,21 +295,27 @@ class TestEstimateSapwoodWidth:
 
 
 class TestDetectSoftShell:
-    def test_returns_two_floats(self, synthetic_pile_signal: np.ndarray, resolution: int) -> None:
+    def test_returns_two_floats(
+        self, synthetic_pile_signal: np.ndarray, resolution: int
+    ) -> None:
         movav = compute_moving_average(synthetic_pile_signal)
         diameter = estimate_diameter(synthetic_pile_signal, resolution)
         left, right = detect_soft_shell(movav, diameter, resolution)
         assert isinstance(left, float)
         assert isinstance(right, float)
 
-    def test_left_less_than_pith(self, synthetic_pile_signal: np.ndarray, resolution: int) -> None:
+    def test_left_less_than_pith(
+        self, synthetic_pile_signal: np.ndarray, resolution: int
+    ) -> None:
         """Soft shell left boundary should be on the left half."""
         movav = compute_moving_average(synthetic_pile_signal)
         diameter = estimate_diameter(synthetic_pile_signal, resolution)
         left, _ = detect_soft_shell(movav, diameter, resolution)
         assert left < diameter / 2
 
-    def test_right_greater_than_pith(self, synthetic_pile_signal: np.ndarray, resolution: int) -> None:
+    def test_right_greater_than_pith(
+        self, synthetic_pile_signal: np.ndarray, resolution: int
+    ) -> None:
         """Soft shell right boundary should be on the right half."""
         movav = compute_moving_average(synthetic_pile_signal)
         diameter = estimate_diameter(synthetic_pile_signal, resolution)
@@ -309,6 +334,7 @@ class TestDetectSoftShell:
     def test_real_signal_soft_shell_plausible(self, sample_rgp_path) -> None:
         """Soft shell thicknesses from a real signal should be between 0 and 50 mm."""
         import json
+
         with open(sample_rgp_path) as f:
             data = json.load(f)
         drill_amp = np.array(data["profile"]["drill"])

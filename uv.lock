@@ -655,7 +655,6 @@ dependencies = [
     { name = "plotly" },
     { name = "pytest" },
     { name = "scipy" },
-    { name = "wxpython" },
     { name = "xlsxwriter" },
 ]
 
@@ -676,7 +675,6 @@ requires-dist = [
     { name = "plotly" },
     { name = "pytest", specifier = ">=7.0" },
     { name = "scipy", specifier = ">=1.11.0" },
-    { name = "wxpython", specifier = ">=4.2.5" },
     { name = "wxpython", marker = "extra == 'tudelft'", specifier = ">=4.2.5" },
     { name = "xlsxwriter", specifier = ">=3.2.9" },
     { name = "xlsxwriter", marker = "extra == 'tudelft'", specifier = ">=3.2.9" },

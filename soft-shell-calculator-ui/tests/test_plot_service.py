@@ -302,3 +302,14 @@ class TestBuildPileFigure:
         fig_json = fig.to_json()
         assert "BM001" in fig_json
         assert "BM002" in fig_json
+        # KPI lines and polar traces should indicate averaged values
+        assert "(gem.)" in fig_json
+        assert "(gemiddeld)" in fig_json
+
+    def test_single_measurement_has_no_average_annotation(self) -> None:
+        """Single measurement should not show average annotations."""
+        pile_row = _make_pile_row()
+        fig = build_pile_figure(pile_row)
+        fig_json = fig.to_json()
+        assert "(gem.)" not in fig_json
+        assert "(gemiddeld)" not in fig_json

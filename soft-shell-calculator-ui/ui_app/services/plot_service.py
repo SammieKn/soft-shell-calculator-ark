@@ -111,13 +111,15 @@ def build_polar_cross_section(pile_row: PileRow) -> go.Figure:
         pile_row.soft_shell_entrance_mm,  # type: ignore[arg-type]
         pile_row.soft_shell_exit_mm,  # type: ignore[arg-type]
     )
+    multiple = len([s for s in pile_row.drill_signals if s]) > 1
+    avg_label = " (gemiddeld)" if multiple else ""
     diameter_subtitle = (
         f"<br><sup>Diameter paal: {pile_row.diameter_mm:.0f} mm | "
         f"Gezonde diameter: {healthy_d:.0f} mm</sup>"
     )
 
     fig.update_layout(
-        title=f"Dwarsdoorsnede — {pile_row.pile_id}{diameter_subtitle}",
+        title=f"Dwarsdoorsnede — {pile_row.pile_id}{avg_label}{diameter_subtitle}",
         polar=_polar_axis_layout(),
         showlegend=True,
     )
@@ -138,6 +140,8 @@ def build_pile_figure(pile_row: PileRow) -> go.Figure:
         pile_row.soft_shell_entrance_mm,
         pile_row.soft_shell_exit_mm,
     )
+    multiple_measurements = len([s for s in pile_row.drill_signals if s]) > 1
+    avg_label = " (gemiddeld)" if multiple_measurements else ""
     if all(v is not None for v in required_for_diameter):
         healthy_d = _healthy_diameter_mm(
             pile_row.diameter_mm,  # type: ignore[arg-type]
@@ -145,7 +149,7 @@ def build_pile_figure(pile_row: PileRow) -> go.Figure:
             pile_row.soft_shell_exit_mm,  # type: ignore[arg-type]
         )
         cross_section_title = (
-            f"Dwarsdoorsnede — {pile_row.pile_id}"
+            f"Dwarsdoorsnede — {pile_row.pile_id}{avg_label}"
             f"<br><sup>Diameter paal: {pile_row.diameter_mm:.0f} mm | "
             f"Gezonde diameter: {healthy_d:.0f} mm</sup>"
         )
@@ -312,7 +316,7 @@ def _add_resistance_traces(
                     showlegend=True,
                     legendgroup="signals",
                     hovertemplate=(
-                        f"<b>{meas_id}</b> (gem.)<br>"
+                        f"<b>{meas_id}</b> (v.gem.)<br>"
                         "Diepte: %{x:.1f} mm<br>"
                         "Weerstand: %{y:.1f} %<extra></extra>"
                     ),
@@ -448,10 +452,13 @@ def _add_resistance_traces(
         )
 
     # Invisible dummy traces so KPI lines appear in the legend
+    # When multiple measurements exist, annotate that KPI values are averages
+    multiple = len([s for s in pile_row.drill_signals if s]) > 1
+    avg_suffix = " (gem.)" if multiple else ""
     _legend_lines: list[tuple[str, str, str, bool]] = [
-        ("Diameter paal", _KPI_DIAMETER, "dash", True),
-        ("Zachte schil", _KPI_SOFT, "dash", bool(soft_entrance or soft_exit)),
-        ("Spinthout", _KPI_SPINT, "dashdot", heartwood is not None),
+        (f"Diameter paal{avg_suffix}", _KPI_DIAMETER, "dash", True),
+        (f"Zachte schil{avg_suffix}", _KPI_SOFT, "dash", bool(soft_entrance or soft_exit)),
+        (f"Spinthout{avg_suffix}", _KPI_SPINT, "dashdot", heartwood is not None),
         ("Midden", _KPI_CENTRE, "dot", True),
     ]
     first = True
@@ -511,8 +518,12 @@ def _add_polar_traces(
     soft_entrance = pile_row.soft_shell_entrance_mm  # type: ignore[arg-type]
     soft_exit = pile_row.soft_shell_exit_mm  # type: ignore[arg-type]
 
+    # Indicate averaged values when multiple measurements are present
+    multiple = len([s for s in pile_row.drill_signals if s]) > 1
+    avg_tag = " gem." if multiple else ""
+
     # Heartwood — innermost, full circle
-    hw_name = f"Kernhout ({heartwood:.0f} mm)"
+    hw_name = f"Kernhout ({heartwood:.0f} mm{avg_tag})"
     fig.add_trace(
         go.Barpolar(
             r=[heartwood],
@@ -532,7 +543,7 @@ def _add_polar_traces(
     )
 
     # Sapwood (spinthout) — ring between heartwood and soft shell
-    sp_name = f"Spinthout ({sapwood:.0f} mm)"
+    sp_name = f"Spinthout ({sapwood:.0f} mm{avg_tag})"
     fig.add_trace(
         go.Barpolar(
             r=[sapwood],
@@ -551,7 +562,7 @@ def _add_polar_traces(
     )
 
     # Soft shell — outermost, asymmetric: links=180° (9 o'clock), rechts=0° (3 o'clock)
-    ss_links_name = f"Zachte schil links ({soft_entrance:.0f} mm)"
+    ss_links_name = f"Zachte schil links ({soft_entrance:.0f} mm{avg_tag})"
     fig.add_trace(
         go.Barpolar(
             r=[soft_entrance],
@@ -568,7 +579,7 @@ def _add_polar_traces(
             subplot=polar_ref,
         )
     )
-    ss_rechts_name = f"Zachte schil rechts ({soft_exit:.0f} mm)"
+    ss_rechts_name = f"Zachte schil rechts ({soft_exit:.0f} mm{avg_tag})"
     fig.add_trace(
         go.Barpolar(
             r=[soft_exit],

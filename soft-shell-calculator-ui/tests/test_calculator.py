@@ -225,6 +225,13 @@ class TestEstimateGrowthRate:
         with pytest.raises(ValueError, match="No peaks found"):
             estimate_growth_rate(flat_signal, diameter, resolution)
 
+    def test_raises_when_outer_zone_is_numerically_flat(self, resolution: int) -> None:
+        """Numerical noise should not be interpreted as valid growth-ring peaks."""
+        nearly_flat_signal = np.ones(2000) + 1e-10 * np.sin(np.linspace(0, 100 * np.pi, 2000))
+        diameter = estimate_diameter(nearly_flat_signal, resolution)
+        with pytest.raises(ValueError, match="No peaks found"):
+            estimate_growth_rate(nearly_flat_signal, diameter, resolution)
+
     def test_real_signal_growth_rate_plausible(self, sample_rgp_path) -> None:
         """Growth rate from a real signal should be between 0.5 mm/ring and 20 mm/ring."""
         import json

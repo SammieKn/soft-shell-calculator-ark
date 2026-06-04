@@ -234,8 +234,18 @@ def estimate_growth_rate(
     outer_zone_end = int(GROWTH_RATE_OUTER_ZONE_FRACTION * radius * resolution)
     inner_zone_start = int((2 - GROWTH_RATE_OUTER_ZONE_FRACTION) * radius * resolution)
 
-    peaks_left, _ = find_peaks(smoothed[:outer_zone_end], distance=min_peak_distance)
-    peaks_right, _ = find_peaks(smoothed[inner_zone_start:], distance=min_peak_distance)
+    left_zone = smoothed[:outer_zone_end]
+    right_zone = smoothed[inner_zone_start:]
+
+    if left_zone.size > 0 and not np.allclose(left_zone, left_zone[0]):
+        peaks_left, _ = find_peaks(left_zone, distance=min_peak_distance)
+    else:
+        peaks_left = np.array([], dtype=int)
+
+    if right_zone.size > 0 and not np.allclose(right_zone, right_zone[0]):
+        peaks_right, _ = find_peaks(right_zone, distance=min_peak_distance)
+    else:
+        peaks_right = np.array([], dtype=int)
 
     n_left = len(peaks_left)
     n_right = len(peaks_right)

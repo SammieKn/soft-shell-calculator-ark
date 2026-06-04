@@ -47,7 +47,7 @@ All Python dependencies are managed by the root `pyproject.toml` via [uv](https:
 
 ```bash
 cd soft-shell-calculator-ui
-pip install -r requirements.txt   # into a venv for viktor-cli
+viktor-cli ci-install
 viktor-cli start
 ```
 

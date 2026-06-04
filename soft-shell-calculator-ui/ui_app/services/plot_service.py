@@ -111,7 +111,10 @@ def build_polar_cross_section(pile_row: PileRow) -> go.Figure:
         pile_row.soft_shell_entrance_mm,  # type: ignore[arg-type]
         pile_row.soft_shell_exit_mm,  # type: ignore[arg-type]
     )
-    diameter_subtitle = f"<br><sup>Gezonde diameter: {healthy_d:.0f} mm</sup>"
+    diameter_subtitle = (
+        f"<br><sup>Diameter paal: {pile_row.diameter_mm:.0f} mm | "
+        f"Gezonde diameter: {healthy_d:.0f} mm</sup>"
+    )
 
     fig.update_layout(
         title=f"Dwarsdoorsnede — {pile_row.pile_id}{diameter_subtitle}",
@@ -143,7 +146,8 @@ def build_pile_figure(pile_row: PileRow) -> go.Figure:
         )
         cross_section_title = (
             f"Dwarsdoorsnede — {pile_row.pile_id}"
-            f"<br><sup>Gezonde diameter: {healthy_d:.0f} mm</sup>"
+            f"<br><sup>Diameter paal: {pile_row.diameter_mm:.0f} mm | "
+            f"Gezonde diameter: {healthy_d:.0f} mm</sup>"
         )
     else:
         cross_section_title = f"Dwarsdoorsnede — {pile_row.pile_id}"
@@ -255,13 +259,22 @@ def _add_resistance_traces(
         is_primary = i == 0
         signal_colour = _COLOUR_PROCESSED if is_primary else _COLOUR_GREY
         movav_colour = _COLOUR_MOVAV if is_primary else _COLOUR_GREY
+
+        # Determine measurement ID for tooltip identification
+        meas_id = (
+            pile_row.measurement_ids[i]
+            if i < len(pile_row.measurement_ids)
+            else f"Meting {i + 1}"
+        )
         signal_label = (
-            "Gefilterd signaal" if is_primary else f"Gefilterd signaal {i + 1}"
+            f"Gefilterd signaal ({meas_id})"
+            if is_primary
+            else f"Gefilterd signaal {i + 1} ({meas_id})"
         )
         movav_label = (
-            "Voortschrijdend gemiddelde"
+            f"Voortschrijdend gemiddelde ({meas_id})"
             if is_primary
-            else f"Voortschrijdend gemiddelde {i + 1}"
+            else f"Voortschrijdend gemiddelde {i + 1} ({meas_id})"
         )
         fig.add_trace(
             go.Scatter(
@@ -273,6 +286,11 @@ def _add_resistance_traces(
                 showlegend=True,
                 legendgroup="signals",
                 legendgrouptitle_text="Boorweerstand" if is_primary else None,
+                hovertemplate=(
+                    f"<b>{meas_id}</b><br>"
+                    "Diepte: %{x:.1f} mm<br>"
+                    "Weerstand: %{y:.1f} %<extra></extra>"
+                ),
             ),
             row=row,
             col=col,
@@ -293,6 +311,11 @@ def _add_resistance_traces(
                     },
                     showlegend=True,
                     legendgroup="signals",
+                    hovertemplate=(
+                        f"<b>{meas_id}</b> (gem.)<br>"
+                        "Diepte: %{x:.1f} mm<br>"
+                        "Weerstand: %{y:.1f} %<extra></extra>"
+                    ),
                 ),
                 row=row,
                 col=col,

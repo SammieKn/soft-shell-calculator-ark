@@ -204,6 +204,13 @@ class TestBuildPolarCrossSection:
         polar_traces = [t for t in fig.data if isinstance(t, go.Barpolar)]
         assert len(polar_traces) == 0
 
+    def test_title_shows_original_diameter(self) -> None:
+        """Figure title should display the original pile diameter."""
+        pile_row = _make_pile_row(diameter=200.0, soft_entrance=5.0, soft_exit=3.0)
+        fig = build_polar_cross_section(pile_row)
+        title_text = fig.layout.title.text or ""
+        assert "Diameter paal: 200 mm" in title_text
+
 
 # ---------------------------------------------------------------------------
 # Tests: build_pile_figure
@@ -243,3 +250,66 @@ class TestBuildPileFigure:
         pile_row = _make_pile_row(pile_id="P2.55")
         fig = build_pile_figure(pile_row)
         assert "P2.55" in (fig.layout.title.text or "")
+
+    def test_cross_section_subtitle_shows_original_diameter(self) -> None:
+        """Dwarsdoorsnede subtitle should display both original and healthy diameter."""
+        pile_row = _make_pile_row(diameter=200.0, soft_entrance=5.0, soft_exit=3.0)
+        fig = build_pile_figure(pile_row)
+        fig_json = fig.to_json()
+        assert "Diameter paal: 200 mm" in fig_json
+        assert "Gezonde diameter: 192 mm" in fig_json
+
+    def test_resistance_traces_show_measurement_id_in_hover(self) -> None:
+        """Drilling resistance traces should include the measurement ID in hover."""
+        pile_row = _make_pile_row()
+        fig = build_pile_figure(pile_row)
+        scatter_traces = [t for t in fig.data if isinstance(t, go.Scatter) and t.y is not None and len(t.y) > 1]
+        # The first signal trace should have measurement ID in hovertemplate
+        signal_trace = scatter_traces[0]
+        assert "BM001" in (signal_trace.hovertemplate or "")
+
+    def test_multiple_measurements_show_distinct_ids_in_hover(self) -> None:
+        """When multiple measurements exist, each trace hover should identify its measurement."""
+        import numpy as np
+
+        rng = np.random.default_rng(42)
+        n = 2000
+        x = np.linspace(0, 40 * np.pi, n)
+        signal1 = tuple(float(v) for v in (15 + 8 * np.sin(x) + rng.normal(0, 0.3, n)).clip(min=0.1))
+        signal2 = tuple(float(v) for v in (12 + 6 * np.sin(x) + rng.normal(0, 0.3, n)).clip(min=0.1))
+
+        pile_row = PileRow(
+            retaining_wall_id="DYG0101",
+            construction_part_id="CON.A",
+            pile_id="P1.82",
+            measurement_ids=("BM001", "BM002"),
+            measurement_count=2,
+            diameter_mm=200.0,
+            annual_rings=55,
+            sapwood_thickness_mm=30.0,
+            heartwood_thickness_mm=70.0,
+            soft_shell_entrance_mm=5.0,
+            soft_shell_exit_mm=3.0,
+            high_drill_amplitude=False,
+            asymmetric_soft_shell=False,
+            warnings=(),
+            status="OK",
+            error_message=None,
+            drill_signals=(signal1, signal2),
+            resolutions=(10, 10),
+        )
+        fig = build_pile_figure(pile_row)
+        fig_json = fig.to_json()
+        assert "BM001" in fig_json
+        assert "BM002" in fig_json
+        # KPI lines and polar traces should indicate averaged values
+        assert "(gem.)" in fig_json
+        assert "(gemiddeld)" in fig_json
+
+    def test_single_measurement_has_no_average_annotation(self) -> None:
+        """Single measurement should not show average annotations."""
+        pile_row = _make_pile_row()
+        fig = build_pile_figure(pile_row)
+        fig_json = fig.to_json()
+        assert "(gem.)" not in fig_json
+        assert "(gemiddeld)" not in fig_json

@@ -20,10 +20,13 @@ class TestFromRgpFile:
         measurement = RPDMeasurement.from_rgp_file(sample_rgp_path)
         assert isinstance(measurement.identifier, MeasurementIdentifier)
 
-    def test_identifier_parsed_from_filename(self, sample_rgp_path: Path) -> None:
-        """The identifier should match the structure of the filename stem."""
+    def test_identifier_parsed_from_header(self, sample_rgp_path: Path) -> None:
+        """The identifier should be built from the header idNumber and number."""
+        header = json.loads(sample_rgp_path.read_text())["header"]
         measurement = RPDMeasurement.from_rgp_file(sample_rgp_path)
-        expected = MeasurementIdentifier.from_filename_stem(sample_rgp_path.stem)
+        expected = MeasurementIdentifier.from_id_number(
+            header["idNumber"], header["number"]
+        )
         assert measurement.identifier == expected
 
     def test_identifier_components_are_non_empty(self, sample_rgp_path: Path) -> None:
@@ -84,6 +87,50 @@ class TestFromRgpFile:
         with pytest.raises(ValueError, match="expected format"):
             RPDMeasurement.from_rgp_file(bad_name)
 
+    def test_falls_back_to_filename(self, tmp_path: Path) -> None:
+        """Without header idNumber/number the filename stem is used."""
+        path = tmp_path / "DYG0101_CON.A_P1.1_BM077.rgp"
+        path.write_text(
+            json.dumps(
+                {
+                    "header": {
+                        "dateYear": 2025,
+                        "dateMonth": 1,
+                        "dateDay": 1,
+                        "resolutionFeed": 10,
+                    },
+                    "profile": {"drill": [1.0]},
+                }
+            )
+        )
+        measurement = RPDMeasurement.from_rgp_file(path)
+        assert measurement.identifier == MeasurementIdentifier(
+            "DYG0101", "CON.A", "P1.1", "BM077"
+        )
+
+    def test_header_takes_precedence_over_filename(self, tmp_path: Path) -> None:
+        """A valid header idNumber and number win over the filename."""
+        path = tmp_path / "OTHER_CON.B_P9.9_BM001.rgp"
+        path.write_text(
+            json.dumps(
+                {
+                    "header": {
+                        "idNumber": "DYG0101/CON.A/P1.1/B",
+                        "number": 77,
+                        "dateYear": 2025,
+                        "dateMonth": 1,
+                        "dateDay": 1,
+                        "resolutionFeed": 10,
+                    },
+                    "profile": {"drill": [1.0]},
+                }
+            )
+        )
+        measurement = RPDMeasurement.from_rgp_file(path)
+        assert measurement.identifier == MeasurementIdentifier(
+            "DYG0101", "CON.A", "P1.1", "77"
+        )
+
     def test_raises_on_missing_header_field(self, tmp_path: Path) -> None:
         """An .rgp file missing required header fields should raise KeyError."""
         incomplete = tmp_path / "DYG0101_CON.A_P1.1_BM077.rgp"
@@ -95,6 +142,7 @@ class TestFromRgpFile:
         """Every .rgp file in the test dataset should load without error."""
         for path in all_rgp_paths:
             measurement = RPDMeasurement.from_rgp_file(path)
-            assert measurement.identifier == MeasurementIdentifier.from_filename_stem(
-                path.stem
+            header = json.loads(path.read_text())["header"]
+            assert measurement.identifier == MeasurementIdentifier.from_id_number(
+                header["idNumber"], header["number"]
             )

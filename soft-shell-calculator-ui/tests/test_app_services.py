@@ -18,6 +18,7 @@ from ui_app.services.export_service import build_pile_csv
 from ui_app.services.export_service import build_batch_csv_zip
 from ui_app.services.upload_service import load_uploaded_measurements
 from ui_app.services.upload_service import load_uploaded_measurements_multi
+from ui_app.services.upload_service import peek_pile_ids_from_file_resource
 from ui_app.services.upload_service import peek_wall_id_from_file_resource
 from ui_app.services.upload_service import peek_wall_ids_from_file_resource
 from ui_app.view_models import (
@@ -387,6 +388,52 @@ class TestPeekWallIds:
         ids = peek_wall_ids_from_file_resource(uploaded_file)
 
         assert ids == []
+
+    def test_uses_header_when_filename_does_not_follow_convention(self) -> None:
+        """Wall and pile IDs come from the header idNumber, not the filename."""
+        zip_content = _build_zip_upload(
+            {
+                "DCG0301_CON A_P1.16M001.rgp": _rgp_with_header(
+                    "DCG0301/CON A/P1.16/B", 1
+                ),
+                "DCG0301_CON A_P1.17M003.rgp": _rgp_with_header(
+                    "DCG0301/CON A/P1.17/B", 3
+                ),
+            }
+        )
+        uploaded_file = FakeUploadedFile("DCG0301.zip", zip_content)
+
+        assert peek_wall_ids_from_file_resource(uploaded_file) == ["DCG0301"]
+        assert peek_pile_ids_from_file_resource(uploaded_file, "DCG0301") == [
+            "P1.16",
+            "P1.17",
+        ]
+        assert peek_pile_ids_from_file_resource(uploaded_file, "OTHER") == []
+
+    def test_falls_back_to_filename_without_header_ids(self) -> None:
+        """Files without idNumber/number fall back to the filename convention."""
+        zip_content = _build_zip_upload(
+            dict([make_rgp_bytes("DYG0101", pile_id="P1.5", measurement_id="BM001")])
+        )
+        uploaded_file = FakeUploadedFile("metingen.zip", zip_content)
+
+        assert peek_pile_ids_from_file_resource(uploaded_file, None) == ["P1.5"]
+
+
+def _rgp_with_header(id_number: str, number: int) -> bytes:
+    """Build minimal .rgp bytes carrying a header idNumber and number."""
+    content = {
+        "header": {
+            "idNumber": id_number,
+            "number": number,
+            "dateYear": 2024,
+            "dateMonth": 1,
+            "dateDay": 15,
+            "resolutionFeed": 10,
+        },
+        "profile": {"drill": [float(v) for v in range(1, 101)]},
+    }
+    return json.dumps(content).encode("utf-8")
 
 
 # ---------------------------------------------------------------------------

@@ -22,7 +22,8 @@ class RPDMeasurement:
     Holds the raw data read from the file. No signal processing is performed
     at this level; computation is handled by the calculator module.
 
-    The ``identifier`` is parsed from the filename stem and gives structured
+    The ``identifier`` is parsed from the header ``idNumber`` and ``number``
+    (falling back to the filename stem) and gives structured
     access to the retaining wall, construction part, pile, and measurement
     IDs. These map directly onto the domain model hierarchy.
 
@@ -45,11 +46,11 @@ class RPDMeasurement:
     def from_rgp_file(cls, file_path: Path) -> "RPDMeasurement":
         """Load an RPDMeasurement from a .rgp file.
 
-        The measurement identifier is parsed from the filename stem following
-        the convention::
+        The measurement identifier is parsed from the header ``idNumber`` and
+        ``number``. If these are missing or malformed, the filename stem is
+        used, following the convention::
 
             <retaining_wall_id>_<construction_part_id>_<pile_id>_<measurement_id>
-
         Args:
             file_path: Path to the .rgp file to load.
 
@@ -71,8 +72,13 @@ class RPDMeasurement:
             data = json.load(f)
 
         header = data["header"]
+        identifier = MeasurementIdentifier.from_rgp_file(
+            file_path=file_path,
+            id_number=header.get("idNumber"),
+            measurement_number=header.get("number"),
+        )
         measurement = cls(
-            identifier=MeasurementIdentifier.from_filename_stem(file_path.stem),
+            identifier=identifier,
             date=datetime(
                 year=header["dateYear"],
                 month=header["dateMonth"],

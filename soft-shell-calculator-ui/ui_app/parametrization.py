@@ -19,7 +19,7 @@ def _get_wall_options(params, **kwargs) -> list[str]:
         params: VIKTOR params object.
 
     Returns:
-        Sorted list of wall IDs derived from the uploaded zip filenames.
+        Sorted list of wall IDs derived from the identifiers of the uploaded files.
     """
     files = getattr(getattr(params, "tab_invoer", None), "meetbestanden", None) or []
     options: list[str] = []
@@ -31,10 +31,11 @@ def _get_wall_options(params, **kwargs) -> list[str]:
 
 
 def _get_pile_options(params, **kwargs) -> list[str]:
-    """Return pile IDs for the selected wall by reading zip filenames only.
+    """Return pile IDs for the selected wall from the uploaded zip identifiers.
 
-    Derives pile IDs directly from `.rgp` filename stems in the uploaded zip —
-    no analysis is performed, keeping the parametrization render fast.
+    Derives pile IDs from the measurement identifiers of the `.rgp` files in
+    the uploaded zip — no analysis is performed, keeping the parametrization
+    render fast.
 
     Args:
         params: VIKTOR params object.

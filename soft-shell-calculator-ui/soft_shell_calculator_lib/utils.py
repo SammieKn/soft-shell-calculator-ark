@@ -4,6 +4,7 @@ import logging
 import re
 from collections import defaultdict
 from dataclasses import dataclass
+from pathlib import Path
 
 
 def get_logger(name: str) -> logging.Logger:
@@ -40,9 +41,11 @@ class MeasurementIdentifier:
 
         DYG0101/CON.A/P1.100/B
 
-    Note: The ``measurement_id`` in the filename (e.g. ``BM059``) and in
-    the ``idNumber`` (e.g. ``B``) are different representations of the same
-    measurement. The filename form is more specific and is the primary source.
+    Note: The ``measurement_id`` in the filename (e.g. ``BM059``) and the
+    header ``number`` (e.g. ``59``) are different representations of the same
+    measurement. The header values (``idNumber`` and ``number``) are the
+    primary source because they are more consistent; the filename is only
+    used as a fallback.
 
     Attributes:
         retaining_wall_id: Identifier of the retaining wall.
@@ -55,6 +58,49 @@ class MeasurementIdentifier:
     construction_part_id: str
     pile_id: str
     measurement_id: str
+
+    @classmethod
+    def from_rgp_file(
+        cls,
+        file_path: Path,
+        id_number: str | None = None,
+        measurement_number: int | str | None = None,
+    ) -> "MeasurementIdentifier":
+        """Parse a MeasurementIdentifier from an .rgp file.
+
+        The header ``idNumber`` and ``number`` are the primary source. If they
+        are missing or malformed, the filename stem is used instead.
+
+        Args:
+            file_path: Path to the .rgp file.
+            id_number: The ``idNumber`` value from the file header, if present.
+            measurement_number: The ``number`` value from the file header,
+                if present.
+
+        Returns:
+            A MeasurementIdentifier with the four component IDs.
+
+        Raises:
+            ValueError: If neither the header nor the filename yields a
+                valid identifier.
+        """
+        header_error: ValueError | None = None
+        if id_number is not None and measurement_number is not None:
+            try:
+                return cls.from_id_number(id_number, measurement_number)
+            except ValueError as e:
+                header_error = e
+
+        try:
+            return cls.from_filename_stem(file_path.stem)
+        except ValueError as filename_error:
+            if header_error is None:
+                raise
+            raise ValueError(
+                f"Failed to parse MeasurementIdentifier from file "
+                f"'{file_path}' (expected format): "
+                f"{header_error}; {filename_error}"
+            ) from filename_error
 
     @classmethod
     def from_filename_stem(cls, stem: str) -> "MeasurementIdentifier":
@@ -85,31 +131,39 @@ class MeasurementIdentifier:
         )
 
     @classmethod
-    def from_id_number(cls, id_number: str) -> "MeasurementIdentifier":
-        """Parse a MeasurementIdentifier from a device idNumber string.
+    def from_id_number(
+        cls, id_number: str, measurement_number: int | str
+    ) -> "MeasurementIdentifier":
+        """Parse a MeasurementIdentifier from a device idNumber and number.
+
+        The measurement ID is taken from ``measurement_number``; any fourth
+        component of ``id_number`` is ignored.
 
         Args:
             id_number: The ``idNumber`` value from the .rgp file header,
                 e.g. ``"DYG0101/CON.A/P1.100/B"``.
+            measurement_number: The ``number`` value from the .rgp file header,
+                e.g. ``77``.
 
         Returns:
             A MeasurementIdentifier with the four component IDs.
 
         Raises:
-            ValueError: If the string does not split into exactly 4 parts on ``/``.
+            ValueError: If ``id_number`` does not split into 3 or 4 parts
+                on ``/``.
         """
         parts = id_number.split("/")
-        if len(parts) != 4:
+        if len(parts) not in (3, 4):
             raise ValueError(
                 f"idNumber '{id_number}' does not match the expected format "
-                f"'<retaining_wall>/<construction_part>/<pile>/<measurement>'. "
-                f"Found {len(parts)} part(s) after splitting on '/' instead of 4."
+                f"'<retaining_wall>/<construction_part>/<pile>(/<measurement>)'. "
+                f"Found {len(parts)} part(s) after splitting on '/' instead of 3 or 4."
             )
         return cls(
             retaining_wall_id=parts[0],
             construction_part_id=parts[1],
             pile_id=parts[2],
-            measurement_id=parts[3],
+            measurement_id=str(measurement_number),
         )
 
     @property

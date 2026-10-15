@@ -1,5 +1,7 @@
 """Tests for utility functions in the utils module."""
 
+from pathlib import Path
+
 import pytest
 
 from soft_shell_calculator_lib.utils import (
@@ -33,19 +35,62 @@ class TestMeasurementIdentifierFromFilenameStem:
 
 class TestMeasurementIdentifierFromIdNumber:
     def test_parses_standard_id_number(self) -> None:
-        m = MeasurementIdentifier.from_id_number("DYG0101/CON.A/P1.100/B")
+        m = MeasurementIdentifier.from_id_number("DYG0101/CON.A/P1.100/B", 59)
         assert m.retaining_wall_id == "DYG0101"
         assert m.construction_part_id == "CON.A"
         assert m.pile_id == "P1.100"
-        assert m.measurement_id == "B"
+        assert m.measurement_id == "59"
+
+    def test_parses_id_number_without_measurement_part(self) -> None:
+        m = MeasurementIdentifier.from_id_number("DYG0101/CON.A/P1.100", "7")
+        assert m.pile_id == "P1.100"
+        assert m.measurement_id == "7"
 
     def test_raises_on_wrong_separator(self) -> None:
         with pytest.raises(ValueError, match="expected format"):
-            MeasurementIdentifier.from_id_number("DYG0101_CON.A_P1.100_B")
+            MeasurementIdentifier.from_id_number("DYG0101_CON.A_P1.100_B", 1)
 
     def test_raises_on_too_few_parts(self) -> None:
         with pytest.raises(ValueError):
-            MeasurementIdentifier.from_id_number("DYG0101/CON.A")
+            MeasurementIdentifier.from_id_number("DYG0101/CON.A", 1)
+
+    def test_raises_on_too_many_parts(self) -> None:
+        with pytest.raises(ValueError):
+            MeasurementIdentifier.from_id_number("A/B/C/D/E", 1)
+
+
+class TestMeasurementIdentifierFromRgpFile:
+    def test_prefers_header(self) -> None:
+        m = MeasurementIdentifier.from_rgp_file(
+            Path("DYG0101_CON.A_P1.100_BM059.rgp"), "DYG0101/CON.A/P1.100/B", 59
+        )
+        assert m.measurement_id == "59"
+
+    def test_header_wins_over_conflicting_filename(self) -> None:
+        m = MeasurementIdentifier.from_rgp_file(
+            Path("OTHER_CON.B_P9.9_BM001.rgp"), "DYG0101/CON.A/P1.100/B", 59
+        )
+        assert m.pile_key == ("DYG0101", "CON.A", "P1.100")
+
+    def test_falls_back_to_filename_without_header_values(self) -> None:
+        m = MeasurementIdentifier.from_rgp_file(
+            Path("DYG0101_CON.A_P1.100_BM059.rgp")
+        )
+        assert m.measurement_id == "BM059"
+
+    def test_falls_back_to_filename_on_malformed_id_number(self) -> None:
+        m = MeasurementIdentifier.from_rgp_file(
+            Path("DYG0101_CON.A_P1.100_BM059.rgp"), "bad", 59
+        )
+        assert m.measurement_id == "BM059"
+
+    def test_raises_when_both_sources_invalid(self) -> None:
+        with pytest.raises(ValueError, match="expected format"):
+            MeasurementIdentifier.from_rgp_file(Path("badname.rgp"), "bad", 1)
+
+    def test_raises_when_filename_invalid_and_no_header_values(self) -> None:
+        with pytest.raises(ValueError, match="expected format"):
+            MeasurementIdentifier.from_rgp_file(Path("badname.rgp"))
 
 
 class TestMeasurementIdentifierPileKey:

@@ -5,6 +5,7 @@ working directory, and builds the retaining-wall domain object used by the UI.
 """
 
 from collections import defaultdict
+import json
 from dataclasses import dataclass
 from io import BytesIO
 from pathlib import Path
@@ -281,11 +282,10 @@ def _parse_rgp_directory(
 def peek_wall_id_from_file_resource(uploaded_file: Any) -> str | None:
     """Extract the retaining-wall ID from a zip file resource without full analysis.
 
-    Reads the first `.rgp` filename from the zip and parses the wall ID from its
-    stem. Avoids loading any measurement data or constructing domain objects.
+    Avoids running any signal processing or constructing domain objects.
 
     When the zip contains files from multiple walls, only the first wall ID
-    (in zip order) is returned. Use :func:`peek_wall_ids_from_file_resource`
+    (alphabetically) is returned. Use :func:`peek_wall_ids_from_file_resource`
     to obtain all wall IDs.
 
     Args:
@@ -301,8 +301,9 @@ def peek_wall_id_from_file_resource(uploaded_file: Any) -> str | None:
 def peek_wall_ids_from_file_resource(uploaded_file: Any) -> list[str]:
     """Extract all unique retaining-wall IDs from a zip file resource.
 
-    Reads every `.rgp` filename from the zip central directory and collects
-    all distinct wall IDs found. No measurement data is loaded.
+    Builds a :class:`MeasurementIdentifier` for every `.rgp` file in the zip,
+    using the same rules as the full analysis (header first, filename as
+    fallback). No measurement data is processed.
 
     Args:
         uploaded_file: VIKTOR FileResource-like object.
@@ -311,20 +312,10 @@ def peek_wall_ids_from_file_resource(uploaded_file: Any) -> list[str]:
         Sorted list of unique retaining-wall IDs, or an empty list on any error.
     """
     try:
-        file_bytes = _read_uploaded_bytes(uploaded_file)
         seen: list[str] = []
-        with ZipFile(BytesIO(file_bytes)) as archive:
-            for name in archive.namelist():
-                if not name.lower().endswith(".rgp"):
-                    continue
-                try:
-                    identifier = MeasurementIdentifier.from_filename_stem(
-                        Path(name).stem
-                    )
-                except ValueError:
-                    continue
-                if identifier.retaining_wall_id not in seen:
-                    seen.append(identifier.retaining_wall_id)
+        for identifier in _read_zip_identifiers(uploaded_file):
+            if identifier.retaining_wall_id not in seen:
+                seen.append(identifier.retaining_wall_id)
         return sorted(seen)
     except Exception:
         return []
@@ -335,8 +326,8 @@ def peek_pile_ids_from_file_resource(
 ) -> list[str]:
     """Extract unique pile IDs for a given wall from a zip without full analysis.
 
-    Reads `.rgp` filenames from the zip central directory and parses the pile ID
-    from each stem. No measurement data is loaded.
+    Builds a :class:`MeasurementIdentifier` for every `.rgp` file in the zip,
+    using the same rules as the full analysis. No measurement data is processed.
 
     Args:
         uploaded_file: VIKTOR FileResource-like object.
@@ -347,22 +338,51 @@ def peek_pile_ids_from_file_resource(
         Deduplicated list of pile IDs, or an empty list on any error.
     """
     try:
-        file_bytes = _read_uploaded_bytes(uploaded_file)
         seen: list[str] = []
-        with ZipFile(BytesIO(file_bytes)) as archive:
-            for name in archive.namelist():
-                if not name.lower().endswith(".rgp"):
-                    continue
-                try:
-                    identifier = MeasurementIdentifier.from_filename_stem(
-                        Path(name).stem
-                    )
-                except ValueError:
-                    continue
-                if wall_id is not None and identifier.retaining_wall_id != wall_id:
-                    continue
-                if identifier.pile_id not in seen:
-                    seen.append(identifier.pile_id)
+        for identifier in _read_zip_identifiers(uploaded_file):
+            if wall_id is not None and identifier.retaining_wall_id != wall_id:
+                continue
+            if identifier.pile_id not in seen:
+                seen.append(identifier.pile_id)
         return seen
     except Exception:
         return []
+
+
+def _read_zip_identifiers(uploaded_file: Any) -> list[MeasurementIdentifier]:
+    """Parse the measurement identifier of every `.rgp` file in a zip.
+
+    Uses :meth:`MeasurementIdentifier.from_rgp_file`, so the header
+    ``idNumber`` and ``number`` take precedence over the filename. Files that
+    cannot be parsed are skipped, mirroring the full analysis.
+
+    Args:
+        uploaded_file: VIKTOR FileResource-like object.
+
+    Returns:
+        Identifiers in zip order.
+
+    Raises:
+        BadZipFile: If the upload is not a valid zip archive.
+    """
+    identifiers: list[MeasurementIdentifier] = []
+    with ZipFile(BytesIO(_read_uploaded_bytes(uploaded_file))) as archive:
+        for member in archive.infolist():
+            if member.is_dir() or not member.filename.lower().endswith(".rgp"):
+                continue
+            try:
+                header = json.loads(archive.read(member))["header"]
+            except (ValueError, KeyError, TypeError):
+                header = {}
+            try:
+                identifiers.append(
+                    MeasurementIdentifier.from_rgp_file(
+                        file_path=Path(member.filename),
+                        id_number=header.get("idNumber"),
+                        measurement_number=header.get("number"),
+                    )
+                )
+            except ValueError:
+                continue
+    return identifiers
+
